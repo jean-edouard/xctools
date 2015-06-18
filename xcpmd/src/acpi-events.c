@@ -31,9 +31,6 @@
 #include "xcpmd.h"
 #include "acpi-events.h"
 
-static int acpi_events_fd = -1;
-static struct event acpi_event;
-
 static void write_state_info_in_xenstore(FILE *file, char *xenstore_path,
              char *search_str, char *default_value, char *alternate_value)
 {
@@ -142,42 +139,6 @@ static void process_acpi_message(char *acpi_buffer, ssize_t len)
     }
 }
 
-void acpi_events_read(void)
-{
-    char acpi_buffer[1024];
-    ssize_t len;
-
-    while ( 1 )
-    {
-        memset(acpi_buffer, 0, sizeof(acpi_buffer));
-        len = recv(acpi_events_fd, acpi_buffer, sizeof(acpi_buffer), 0);
-
-        if ( len == 0 )
-            break;
-
-        if ( len == -1 )
-        {
-            if ( errno != EAGAIN )
-                xcpmd_log(LOG_ERR, "Error returned while reading ACPI event - %d\n", errno);
-            /* else nothing to read */
-            break;
-        }
-
-        process_acpi_message(acpi_buffer, len);
-#ifdef XCPMD_DEBUG
-        acpi_buffer[len] = '\0';
-        xcpmd_log(LOG_DEBUG, "~ACPI-event: %s\n", acpi_buffer);
-#endif
-    }
-}
-
-static void
-wrapper_acpi_event(int fd, short event, void *opaque)
-{
-    acpi_events_read();
-}
-
-
 void
 handle_ac_adapter_event(uint32_t type, uint32_t data)
 {
@@ -207,69 +168,22 @@ handle_battery_event(uint32_t type)
     }
 }
 
-
-int acpi_events_initialize(void)
+void
+handle_button_event(uint32_t type, uint32_t data)
 {
-    int ret, i, err;
-    struct sockaddr_un addr;
-
-    acpi_events_fd = socket(PF_UNIX, SOCK_STREAM, 0);
-    if ( acpi_events_fd == -1 )
+    switch (type)
     {
-        xcpmd_log(LOG_ERR, "Socket function failed with error - %d\n", errno);
-        acpi_events_cleanup();
-        return -1;
-    }
-
-    ret = file_set_nonblocking(acpi_events_fd);
-    if ( ret == -1 )
-    {
-        xcpmd_log(LOG_ERR, "Set non-blocking failed with error - %d\n", errno);
-        acpi_events_cleanup();
-        return -1;
-    }
-
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, ACPID_SOCKET_PATH, strlen(ACPID_SOCKET_PATH));
-    addr.sun_path[strlen(ACPID_SOCKET_PATH)] = '\0';
-
-    for ( i = 0; ; i++ )
-    {
-        ret = connect(acpi_events_fd, (struct sockaddr *)&addr, sizeof(addr));
-
-        if ( ret != -1 )
+        case ACPI_BUTTON_TYPE_POWER: /* power button pressed */
+            handle_pbtn_pressed_event();
             break;
-
-        if ( i == 5 )
-        {
-            xcpmd_log(LOG_INFO, "ACPI events initialization failed!\n");
-            acpi_events_cleanup();
-            return -1;
-        }
-
-        xcpmd_log(LOG_ERR, "Socket connection function failed with error - %d, on attempt %d\n",
-                  errno, i + 1);
-
-        sleep(5);
+        case ACPI_BUTTON_TYPE_SLEEP: /* sleep button pressed */
+            handle_sbtn_pressed_event();
+            break;
+        case ACPI_BUTTON_TYPE_LID:   /* lid closed */
+            xcpmd_log(LOG_WARNING, "Lid event happened, with data=%d. Doing nothing.\n", data);
+	    /* handle_lid_state_change(); */
+            break;
+        default:
+            xcpmd_log(LOG_WARNING, "Unknown button event code %d\n", type);
     }
-
-    /* register event on acpi socket */
-    event_set(&acpi_event, acpi_events_fd, EV_READ | EV_PERSIST,
-              wrapper_acpi_event, NULL);
-    event_add(&acpi_event, NULL);
-
-    xcpmd_log(LOG_INFO, "ACPI events initialized.\n");
-
-    return 0;
 }
-
-void acpi_events_cleanup(void)
-{
-    xcpmd_log(LOG_INFO, "ACPI events cleanup\n");
-
-    if ( acpi_events_fd != -1 )
-        close(acpi_events_fd);
-
-    acpi_events_fd = -1;
-}
-

@@ -797,12 +797,6 @@ int main(int argc, char *argv[])
         goto xcpmd_err;
     }
 
-    if (acpi_events_initialize() == -1)
-    {
-        xcpmd_log(LOG_ERR, "Failed to initialize ACPI events monitor\n");
-        goto xcpmd_err;
-    }
-
     if (netlink_init() != 0)
     {
         xcpmd_log(LOG_ERR, "Failed to initialize netlink\n");
@@ -821,7 +815,6 @@ int main(int argc, char *argv[])
 xcpmd_err:
     ret = -1;
 xcpmd_out:
-    acpi_events_cleanup();
     xcpmd_dbus_cleanup();
     netlink_cleanup();
 

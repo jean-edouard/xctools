@@ -78,6 +78,8 @@ netlink_cb(struct nl_msg *msg, void *arg)
         handle_ac_adapter_event(event->type, event->data);
     else if (strcmp(event->device_class, ACPI_BATTERY_CLASS) == 0)
         handle_battery_event(event->type);
+    else if (strcmp(event->device_class, ACPI_BUTTON_CLASS) == 0)
+        handle_button_event(event->type, event->data);
 
     return 0;
 }

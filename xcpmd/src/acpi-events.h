@@ -33,5 +33,11 @@
 #define ACPI_BATTERY_NOTIFY_STATUS      0x80
 #define ACPI_BATTERY_NOTIFY_INFO        0x81
 
+/* From drivers/acpi/button.c */
+#define ACPI_BUTTON_CLASS               "button"
+#define ACPI_BUTTON_TYPE_POWER          0x01
+#define ACPI_BUTTON_TYPE_SLEEP          0x03
+#define ACPI_BUTTON_TYPE_LID            0x05
+
 #endif
 

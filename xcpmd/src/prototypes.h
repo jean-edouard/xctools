@@ -31,6 +31,7 @@ void handle_oem_event(const char *bus_id, uint32_t ev);
 void acpi_events_read(void);
 void handle_ac_adapter_event(uint32_t type, uint32_t data);
 void handle_battery_event(uint32_t type);
+void handle_button_event(uint32_t type, uint32_t data);
 int acpi_events_initialize(void);
 void acpi_events_cleanup(void);
 /* platform.c */
