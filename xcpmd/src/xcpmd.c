@@ -518,6 +518,11 @@ static int get_battery_status(struct battery_status *status)
         if ( current->present == NO )
             continue;
 
+        if (memcmp(current, last_status + batn, sizeof(struct battery_status))) {
+          xenstore_write("1", XS_BATTERY_STATUS_CHANGE_EVENT_PATH);
+          notify_com_citrix_xenclient_xcpmd_battery_status_changed(xcdbus_conn, XCPMD_SERVICE, XCPMD_PATH);
+        }
+
         batn++;
         if ( batn >= MAX_BATTERY_SUPPORTED )
             break;
@@ -535,9 +540,6 @@ static int get_battery_status(struct battery_status *status)
 static void update_batteries(void)
 {
     struct battery_status status[MAX_BATTERY_SUPPORTED];
-
-    /* TODO the battery status is not updated when the ACPI event fires so
-     * we get stale or missing BSTx nodes in xenstore for a period. */
 
     if ( pm_specs & PM_SPEC_NO_BATTERIES )
         return;

@@ -196,8 +196,8 @@ handle_battery_event(uint32_t type)
     switch (type)
     {
         case ACPI_BATTERY_NOTIFY_STATUS: /* status change */
-            xenstore_write("1", XS_BATTERY_STATUS_CHANGE_EVENT_PATH);
-            notify_com_citrix_xenclient_xcpmd_battery_status_changed(xcdbus_conn, XCPMD_SERVICE, XCPMD_PATH);
+            /* get_battery_status() will send the dbus signal once the
+             * sys nodes actually changed */
             break;
         case ACPI_BATTERY_NOTIFY_INFO: /* add/remove */
             handle_battery_info_change_event();
