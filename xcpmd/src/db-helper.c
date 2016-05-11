@@ -209,6 +209,10 @@ bool parse_db_vars(struct parse_data * parse_data) {
     int i, num_vars;
 
     json = db_dump_path(DB_VAR_MAP_PATH);
+    if (json == NULL) {
+        xcpmd_log(LOG_WARNING, "Couldn't get variables from DB.");
+        return false;
+    }
     yajl = yajl_tree_parse(json, err, sizeof(err));
 
     if (YAJL_IS_OBJECT(yajl)) {
@@ -290,6 +294,10 @@ bool parse_db_rules(struct parse_data * data) {
     int num_rules, i, j;
 
     json_all = db_dump_path(DB_RULE_PATH);
+    if (json == NULL) {
+        xcpmd_log(LOG_WARNING, "Couldn't get rules from DB.");
+        return false;
+    }
     xcpmd_log(LOG_DEBUG, "Received json: %s", json_all);
 
     //There are no rules in the DB.
@@ -302,6 +310,7 @@ bool parse_db_rules(struct parse_data * data) {
     yajl = yajl_tree_parse(json_all, err, sizeof(err));
     if (yajl == NULL) {
         xcpmd_log(LOG_WARNING, "Error parsing DB rules: %s", err);
+        free(json_all);
         return false;
     }
 
@@ -318,6 +327,10 @@ bool parse_db_rules(struct parse_data * data) {
         rule_name = (char *)yajl->u.object.keys[i];
         path = safe_sprintf("%s/%s", DB_RULE_PATH, rule_name);
         json_rule = db_dump_path(path);
+        if (json_rule == NULL) {
+            xcpmd_log(LOG_WARNING, "Failed to read DB rule at %s.", path);
+            continue;
+        }
         rule_arr = json_rule_to_parseable(rule_name, json_rule);
         free(json_rule);
         if (rule_arr == NULL) {
@@ -403,11 +416,11 @@ static char ** json_rule_to_parseable(char * name, char * json) {
 
     //Check for bad JSON, but don't warn for a valid empty rule.
     if (YAJL_IS_STRING(yajl) && (!strncmp(yajl->u.string, "null", 4) || *(yajl->u.string) == '\0')) {
-        return NULL;
+        goto free_yajl;
     }
     else if (!YAJL_IS_OBJECT(yajl)) {
         xcpmd_log(LOG_WARNING, "Error parsing JSON: rule is malformed");
-        return NULL;
+        goto free_yajl;
     }
 
     //Get the rule's name.
