@@ -61,11 +61,12 @@ do {                                                                 \
 
 #define V4V_CHARDRV_NAME  "[v4v-chardrv]"
 
-struct qmp_helper_state { 
+struct qmp_helper_state {
     int stubdom_id;
     int v4v_fd;
     v4v_addr_t remote_addr;
     v4v_addr_t local_addr;
+    int listen_fd;
     int unix_fd;
     uint8_t msg_buf[V4V_CHARDRV_RING_SIZE];
 };
@@ -82,6 +83,9 @@ static void qmph_exit_cleanup(int exit_code)
     /* close connection on the UNIX socket */
     close(qhs.unix_fd);
     qhs.unix_fd = -1;
+
+    /* Done listening */
+    close(qhs.listen_fd);
 
     /* close v4v channel to stubdom */
     v4v_close(qhs.v4v_fd);
@@ -103,8 +107,8 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
         return rcv;
     }
     else if (rcv == 0) {
-        QMPH_LOG("read(unix_fd) recieved EOF, exiting.\n");
-        qmph_exit_cleanup(0);
+        QMPH_LOG("read(unix_fd) recieved EOF\n");
+        return ENOTCONN;
     }
 
     ret = v4v_sendto(pqhs->v4v_fd, pqhs->msg_buf,
@@ -174,11 +178,38 @@ err:
     return -1;
 }
 
-static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
+static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
 {
     struct sockaddr_un un;
     socklen_t len = sizeof(un);
     int lfd, cfd;
+
+    QMPH_LOG("Waiting for connection on unix socket");
+
+    lfd = pqhs->listen_fd;
+
+    memset(&un, 0, sizeof(un));
+
+    cfd = accept(lfd, (struct sockaddr*)&un, &len);
+    if (cfd < 0) {
+        QMPH_LOG("ERROR listen socket failed - err: %d", errno);
+        goto err;
+    }
+
+    QMPH_LOG("Accepted the connection cfd: %d", cfd);
+
+    pqhs->unix_fd = cfd;
+
+    return 0;
+err:
+    close(lfd);
+    return -1;
+}
+
+static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
+{
+    struct sockaddr_un un;
+    int lfd;
 
     /* By default the helper creates a Unix socket as if QEMU were called with:
      * -qmp unix:/var/run/xen/qmp-libxl-<domid>,server,nowait
@@ -210,20 +241,9 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
         goto err;
     }
 
-    memset(&un, 0, sizeof(un));
+    pqhs->listen_fd = lfd;
 
-    cfd = accept(lfd, (struct sockaddr*)&un, &len);
-    if (cfd < 0) {
-        QMPH_LOG("ERROR listen socket failed - err: %d", errno);
-        goto err;
-    }
-
-    QMPH_LOG("Accepted the connection cfd: %d", cfd);
-
-    /* Done listening */
-    close(lfd);
-
-    pqhs->unix_fd = cfd;
+    qmph_accept_unix_socket(pqhs);
 
     return 0;
 
@@ -294,7 +314,10 @@ int main(int argc, char *argv[])
         }
 
         if (FD_ISSET(qhs.unix_fd, &rfds)) {
-            if (qmph_unix_to_v4v(&qhs))
+            ret = qmph_unix_to_v4v(&qhs);
+            if (ret == ENOTCONN)
+                qmph_accept_unix_socket(&qhs);
+            else if (ret != 0)
                 break; /* abject misery */
         }
 
