@@ -61,6 +61,9 @@ do {                                                                 \
 
 #define V4V_CHARDRV_NAME  "[v4v-chardrv]"
 
+#define V4V_MAGIC_CONNECT    "live"
+#define V4V_MAGIC_DISCONNECT "dead"
+
 struct qmp_helper_state {
     int stubdom_id;
     int v4v_fd;
@@ -107,7 +110,11 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
         return rcv;
     }
     else if (rcv == 0) {
-        QMPH_LOG("read(unix_fd) recieved EOF\n");
+        QMPH_LOG("read(unix_fd) recieved EOF, telling qemu.\n");
+        ret = v4v_sendto(pqhs->v4v_fd, V4V_MAGIC_DISCONNECT,
+                         4, 0, &pqhs->remote_addr);
+        close(pqhs->unix_fd);
+        pqhs->unix_fd = -1;
         return ENOTCONN;
     }
 
@@ -196,8 +203,6 @@ static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
         goto err;
     }
 
-    QMPH_LOG("Accepted the connection cfd: %d", cfd);
-
     pqhs->unix_fd = cfd;
 
     return 0;
@@ -210,6 +215,7 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 {
     struct sockaddr_un un;
     int lfd;
+    int ret;
 
     /* By default the helper creates a Unix socket as if QEMU were called with:
      * -qmp unix:/var/run/xen/qmp-libxl-<domid>,server,nowait
@@ -243,7 +249,11 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 
     pqhs->listen_fd = lfd;
 
-    qmph_accept_unix_socket(pqhs);
+    ret = qmph_accept_unix_socket(pqhs);
+    if (ret) {
+        QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
+        qmph_exit_cleanup(ret);
+    }
 
     return 0;
 
@@ -315,8 +325,16 @@ int main(int argc, char *argv[])
 
         if (FD_ISSET(qhs.unix_fd, &rfds)) {
             ret = qmph_unix_to_v4v(&qhs);
-            if (ret == ENOTCONN)
-                qmph_accept_unix_socket(&qhs);
+            if (ret == ENOTCONN) {
+	        ret = qmph_accept_unix_socket(&qhs);
+                if (ret) {
+                    QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
+                    qmph_exit_cleanup(ret);
+                }
+                QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
+                ret = v4v_sendto(qhs.v4v_fd, V4V_MAGIC_CONNECT,
+                                 4, 0, &qhs.remote_addr);
+            }
             else if (ret != 0)
                 break; /* abject misery */
         }
