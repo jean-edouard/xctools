@@ -82,6 +82,8 @@ static int pending_exit = 0;
 
 static void qmph_exit_cleanup(int exit_code)
 {
+    char sun_path[256];
+
     pending_exit = 1;
 
     /* close connection on the UNIX socket */
@@ -90,6 +92,10 @@ static void qmph_exit_cleanup(int exit_code)
 
     /* Done listening */
     close(qhs.listen_fd);
+
+    /* Remove socket file */
+    snprintf(sun_path, 256, "/var/run/xen/qmp-libxl-%d", qhs.guest_id);
+    unlink(sun_path);
 
     /* close v4v channel to stubdom */
     v4v_close(qhs.v4v_fd);
@@ -112,17 +118,15 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
     }
     else if (rcv == 0) {
         QMPH_LOG("read(unix_fd) recieved EOF, telling qemu.\n");
-        ret = v4v_sendto(pqhs->v4v_fd, V4V_MAGIC_DISCONNECT,
-                         4, 0, &pqhs->remote_addr);
+        ret = v4v_send(pqhs->v4v_fd, V4V_MAGIC_DISCONNECT, 4, 0);
         close(pqhs->unix_fd);
         pqhs->unix_fd = -1;
         return ENOTCONN;
     }
 
-    ret = v4v_sendto(pqhs->v4v_fd, pqhs->msg_buf,
-                     rcv, 0, &pqhs->remote_addr);
+    ret = v4v_send(pqhs->v4v_fd, pqhs->msg_buf, rcv, 0);
     if (ret != rcv) {
-        QMPH_LOG("ERROR v4v_sendto() failed (%s) - %d %d.\n",
+        QMPH_LOG("ERROR v4v_send() failed (%s) - %d %d.\n",
                  strerror(errno), ret, rcv);
         return -1;
     }
@@ -134,19 +138,25 @@ static int qmph_v4v_to_unix(struct qmp_helper_state *pqhs)
 {
     int ret, rcv;
 
-    rcv = v4v_recvfrom(pqhs->v4v_fd, pqhs->msg_buf, sizeof(pqhs->msg_buf),
-                       0, &pqhs->remote_addr);
+    rcv = v4v_recv(pqhs->v4v_fd, pqhs->msg_buf, sizeof(pqhs->msg_buf), 0);
     if (rcv < 0) {
-        QMPH_LOG("ERROR v4v_recvfrom() failed (%s) - %d.\n",
+        QMPH_LOG("ERROR v4v_recv() failed (%s) - %d.\n",
                  strerror(errno), rcv);
         return rcv;
     }
+    else if (rcv == 0) {
+        QMPH_LOG("qemu is gone\n");
+	return -1;
+    }
 
-    ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
-    if (ret < 0) {
-        QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
-                 strerror(errno), ret);
-        return ret;
+    /* If nobody is listening, did qemu really talk? */
+    if (pqhs->unix_fd != -1) {
+        ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
+        if (ret < 0) {
+            QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
+                     strerror(errno), ret);
+            return ret;
+        }
     }
 
     return 0;
@@ -156,7 +166,7 @@ static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
 {
     uint32_t v4v_ring_size = V4V_CHARDRV_RING_SIZE;
 
-    pqhs->v4v_fd = v4v_socket(SOCK_DGRAM);
+    pqhs->v4v_fd = v4v_socket(SOCK_STREAM);
     if (pqhs->v4v_fd == -1) {
         QMPH_LOG("ERROR unable to create a v4vsocket");
         return -1;
@@ -178,6 +188,11 @@ static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
         goto err;
     }
 
+    if (v4v_connect(pqhs->v4v_fd, &pqhs->remote_addr) == -1) {
+        QMPH_LOG("ERROR unable to connect to qemu");
+        goto err;
+    }
+
     return 0;
 
 err:
@@ -191,6 +206,7 @@ static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
     struct sockaddr_un un;
     socklen_t len = sizeof(un);
     int lfd, cfd;
+    int ret;
 
     QMPH_LOG("Waiting for connection on unix socket");
 
@@ -205,6 +221,18 @@ static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
     }
 
     pqhs->unix_fd = cfd;
+
+    /* Now that we're listening to XL, connect to qemu */
+    if (qhs.v4v_fd < 0) {
+        ret = qmph_init_v4v_socket(&qhs);
+        if (ret) {
+            QMPH_LOG("ERROR failed to init v4v socket - ret: %d\n", ret);
+            goto err;
+        }
+    } else {
+      QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
+      ret = v4v_send(qhs.v4v_fd, V4V_MAGIC_CONNECT, 4, 0);
+    }
 
     return 0;
 err:
@@ -299,15 +327,9 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    qhs.v4v_fd = -1;
+
     signal(SIGINT, qmph_signal_handler);
-
-    ret = qmph_init_v4v_socket(&qhs);
-    if (ret) {
-        QMPH_LOG("ERROR failed to init v4v socket - ret: %d\n", ret);
-        return -1;
-    }
-
-    QMPH_LOG("v4v ready, wait for a connection...");
 
     /* Ready to listen and accept one connection. Note this will block on
      * accept until connected.
@@ -321,7 +343,8 @@ int main(int argc, char *argv[])
     while (!pending_exit) {
 
         FD_ZERO(&rfds);
-        FD_SET(qhs.v4v_fd, &rfds);
+        if (qhs.v4v_fd > 0)
+            FD_SET(qhs.v4v_fd, &rfds);
         FD_SET(qhs.unix_fd, &rfds);
         nfds = ((qhs.v4v_fd > qhs.unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
 
@@ -339,17 +362,14 @@ int main(int argc, char *argv[])
                     QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
                     qmph_exit_cleanup(ret);
                 }
-                QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
-                ret = v4v_sendto(qhs.v4v_fd, V4V_MAGIC_CONNECT,
-                                 4, 0, &qhs.remote_addr);
             }
             else if (ret != 0)
-                break; /* abject misery */
+                break; /* The UNIX socket is broken... */
         }
 
         if (FD_ISSET(qhs.v4v_fd, &rfds)) {
             if (qmph_v4v_to_unix(&qhs))
-                break; /* total death */
+                break; /* qemu is dead */
         }
     }
 
