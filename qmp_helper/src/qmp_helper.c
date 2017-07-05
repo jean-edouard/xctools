@@ -59,6 +59,9 @@ do {                                                                 \
 #define V4V_CHARDRV_RING_SIZE \
   (V4V_ROUNDUP((((4096)*4) - sizeof(v4v_ring_t)-V4V_ROUNDUP(1))))
 
+#define V4V_MAGIC_CONNECT    "live"
+#define V4V_MAGIC_DISCONNECT "dead"
+
 #define V4V_CHARDRV_NAME  "[v4v-chardrv]"
 
 struct qmp_helper_state {
@@ -114,11 +117,10 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
         return rcv;
     }
     else if (rcv == 0) {
-      QMPH_LOG("JED XL DONE CLOSE\n");
+        QMPH_LOG("read(unix_fd) recieved EOF, telling qemu.\n");
+        ret = v4v_send(pqhs->v4v_fd, V4V_MAGIC_DISCONNECT, 4, 0);
         close(pqhs->unix_fd);
-        v4v_close(pqhs->v4v_fd);
         pqhs->unix_fd = -1;
-        pqhs->v4v_fd = -1;
         return ENOTCONN;
     }
 
@@ -145,16 +147,20 @@ static int qmph_v4v_to_unix(struct qmp_helper_state *pqhs)
         return rcv;
     }
     else if (rcv == 0) {
-      QMPH_LOG("JED QEMU DONE\n");
+        QMPH_LOG("JED QEMU DONE\n");
+	return -1;
     }
 
     QMPH_LOG("JED QEMU %s\n", pqhs->msg_buf);
 
-    ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
-    if (ret < 0) {
-        QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
-                 strerror(errno), ret);
-        return ret;
+    /* If nobody is listening, did qemu really talk? */
+    if (pqhs->unix_fd != -1) {
+        ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
+        if (ret < 0) {
+            QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
+                     strerror(errno), ret);
+            return ret;
+        }
     }
 
     return 0;
@@ -221,13 +227,17 @@ static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
     pqhs->unix_fd = cfd;
 
     /* Now that we're listening to XL, connect to QEmu */
-    ret = qmph_init_v4v_socket(&qhs);
-    if (ret) {
-        QMPH_LOG("ERROR failed to init v4v socket - ret: %d\n", ret);
-        goto err;
+    if (qhs.v4v_fd < 0) {
+        ret = qmph_init_v4v_socket(&qhs);
+        if (ret) {
+            QMPH_LOG("ERROR failed to init v4v socket - ret: %d\n", ret);
+            goto err;
+        }
+	QMPH_LOG("Sockets up");
+    } else {
+      QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
+      ret = v4v_send(qhs.v4v_fd, V4V_MAGIC_CONNECT, 4, 0);
     }
-
-    QMPH_LOG("Sockets up");
 
     return 0;
 err:
@@ -322,6 +332,8 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    qhs.v4v_fd = -1;
+
     signal(SIGINT, qmph_signal_handler);
 
     /* Ready to listen and accept one connection. Note this will block on
@@ -357,12 +369,12 @@ int main(int argc, char *argv[])
                 }
             }
             else if (ret != 0)
-                break; /* abject misery */
+                break; /* The UNIX socket is broken... */
         }
 
         if (FD_ISSET(qhs.v4v_fd, &rfds)) {
             if (qmph_v4v_to_unix(&qhs))
-                break; /* total death */
+                break; /* QEmu is dead */
         }
     }
 
