@@ -398,7 +398,7 @@ static int atapi_ptv4v_open(ATAPIPTHelperState *hs, uint8_t *buf, size_t len)
     ATAPIPTDeviceState *ds;
 
     if (len != sizeof(*request)) {
-        PT_LOG("error: mismatch buffer size %d vs %d", len, sizeof(*request));
+        PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
         return -1;
     }
 
@@ -438,7 +438,7 @@ static int atapi_ptv4v_acquire_lock(ATAPIPTHelperState* hs, uint8_t *buf,
     request = (pt_v4vcmd_acquire_lock_request_t *)buf;
 
     if (len != sizeof(*request)) {
-        PT_LOG("error: mismatch buffer size %d vs %d", len, sizeof(*request));
+        PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
         return -1;
     }
 
@@ -480,7 +480,7 @@ static int atapi_ptv4v_release_lock(ATAPIPTHelperState* hs, uint8_t *buf,
     request = (pt_v4vcmd_release_lock_request_t *)buf;
 
     if (len != sizeof(*request)) {
-        PT_LOG("error: mismatch buffer size %d vs %d", len, sizeof(*request));
+        PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
         return -1;
     }
 
@@ -513,7 +513,7 @@ static int atapi_ptv4v_sg_get_reserved_size(ATAPIPTHelperState* hs,
     request = (pt_v4vcmd_sg_get_reserved_size_request_t *)buf;
 
     if (len != sizeof(*request)) {
-        PT_LOG("error: mismatch buffer size %d vs %d", len, sizeof(*request));
+        PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
         return -1;
     }
 
@@ -565,13 +565,13 @@ static int atapi_ptv4v_sg_io(ATAPIPTHelperState* hs, uint8_t *buf, size_t len)
 
     /* len must at least be size of request */
     if (len < sizeof(*request)) {
-        PT_LOG("error: bad buffer size %d vs %d", len, sizeof(*request));
+        PT_LOG("error: bad buffer size %lu vs %lu", len, sizeof(*request));
         return -1;
     }
 
     /* now validate true length using data len in request */
     if (len != sizeof(*request) + request->dout_data_len) {
-        PT_LOG("error: buffer size %d vs %d", len,
+        PT_LOG("error: buffer size %lu vs %lu", len,
                 sizeof(*request) + request->dout_data_len);
         return -1;
     }
