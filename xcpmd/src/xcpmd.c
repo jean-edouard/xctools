@@ -43,9 +43,18 @@
 #include "rules.h"
 
 
+void sighandler_term(int signal, short event, void *base)
+{
+    (void) signal;
+    (void) event;
+    event_base_loopbreak(base);
+}
+
 int main(int argc, char *argv[]) {
 
     int ret = 0;
+    struct event ev_sigterm;
+    struct event_base *ev_base;
 
 #ifndef RUN_STANDALONE
     openlog("xcpmd", 0, LOG_DAEMON);
@@ -55,7 +64,11 @@ int main(int argc, char *argv[]) {
     xcpmd_log(LOG_INFO, "Starting XenClient power management daemon.\n");
 
     //Initialize libevent library
-    event_init();
+    ev_base = event_init();
+
+    //SIGTERM handler.
+    evsignal_set(&ev_sigterm, SIGTERM, sighandler_term, ev_base);
+    evsignal_add(&ev_sigterm, NULL);
 
     //Initialize xenstore.
     if (xenstore_init() == -1) {
@@ -131,8 +144,7 @@ xcpmd_out:
 #ifndef RUN_STANDALONE
     closelog();
 #endif
+    unlink(XCPMD_PID_FILE);
 
     return ret;
 }
-
-
