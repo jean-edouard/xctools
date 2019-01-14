@@ -2,7 +2,7 @@ language: c
 
 before_install:
 - sudo apt-get update
-- sudo apt-get install -y build-essential autoconf automake libdbus-1-dev libjson-c-dev libuv-dev libxml2-dev libssl-dev zlib1g-dev screen gdb
+- sudo apt-get install -y build-essential autoconf automake libdbus-1-dev libjson-c-dev libuv1-dev libxml2-dev libssl-dev zlib1g-dev screen gdb
 - wget https://github.com/warmcat/libwebsockets/archive/v3.0.0.tar.gz
 - tar xzf v3.0.0.tar.gz
 - cd libwebsockets-3.0.0
