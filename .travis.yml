@@ -2,7 +2,18 @@ language: c
 
 before_install:
 - sudo apt-get update
-- sudo apt-get install -y build-essential autoconf automake libdbus-1-dev libjson-c-dev libuv1-dev libxml2-dev libssl-dev zlib1g-dev screen gdb
+- sudo apt-get install -y build-essential autoconf automake libdbus-1-dev libjson-c-dev libxml2-dev libssl-dev zlib1g-dev screen gdb
+# Install libuv1, unavailable on Ubuntu Trusty
+# Stick with 1.11 for now, to match OE pyro
+- wget https://github.com/libuv/libuv/archive/v1.11.0.tar.gz
+- tar xzf v1.11.0.tar.gz
+- cd libuv-1.11.0
+- autoreconf --verbose --install --force
+- ./configure
+- make
+- sudo make install
+- cd ..
+# Install libwebsocket 3, unavailable on Ubuntu Trusty
 - wget https://github.com/warmcat/libwebsockets/archive/v3.0.0.tar.gz
 - tar xzf v3.0.0.tar.gz
 - cd libwebsockets-3.0.0
