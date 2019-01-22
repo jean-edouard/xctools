@@ -1,0 +1,54 @@
+language: c
+
+before_install:
+- sudo apt-get update
+- sudo apt-get install -y build-essential autoconf automake libdbus-1-dev libjson-c-dev libxml2-dev libssl-dev zlib1g-dev screen gdb
+- wget https://github.com/warmcat/libwebsockets/archive/v3.0.0.tar.gz
+- tar xzf v3.0.0.tar.gz
+- cd libwebsockets-3.0.0
+- mkdir build
+- cd build
+- cmake ..
+- make
+- sudo make install
+- cd ..
+- cd ..
+- wget https://github.com/libuv/libuv/archive/v1.11.0.tar.gz
+- tar xzf v1.11.0.tar.gz
+- cd libuv-1.11.0
+- mkdir -p m4
+- touch m4/libuv-extra-automake-flags.m4
+#- autoreconf --verbose --install --force
+- ./autogen.sh
+- ./configure
+- make
+- sudo make install
+- cd ..
+
+script:
+- cd rpc-broker
+- autoreconf --verbose --install --force
+- ./configure
+- make
+- export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+- ulimit -c unlimited -S
+- ./rpc-broker -r 5555 &
+- RPCBPID=$!
+#
+# Test #1, call ListNames on system dbus directly and through rpc-broker
+# The results need to be sanitized to be comparable, hence the sed
+# Make sure there's no diff between the two results.
+#
+- dbus-send --system --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames | sed 's/[0-9]\+\.[0-9]\+/xx.xx/g' | sort > /tmp/t1
+- DBUS_SYSTEM_BUS_ADDRESS=tcp:host=127.0.0.1,port=5555 dbus-send --system --dest=org.freedesktop.DBus --type=method_call --print-reply /org/freedesktop/DBus org.freedesktop.DBus.ListNames | sed 's/[0-9]\+\.[0-9]\+/xx.xx/g' | sort > /tmp/t2
+- diff -u /tmp/t1 /tmp/t2 ; RES=$?
+#
+# End of Test #1, the result is in $RES
+#
+- kill $RPCBPID
+- test $RES -eq 0
+
+after_failure:
+# http://jsteemann.github.io/blog/2014/10/30/getting-core-dumps-of-failed-travisci-builds/
+- COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
+- if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" rpc-broker -ex "thread apply all bt" -ex "set pagination 0" -batch; fi
