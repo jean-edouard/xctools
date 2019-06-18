@@ -44,7 +44,7 @@ bin_PROGRAMS = atapi_pt_helper
 
 SRCS=atapi_pt_helper.c version.c
 atapi_pt_helper_SOURCES = ${SRCS}
-atapi_pt_helper_LDADD =  ${X_LIBS} -lxenstore -lv4v -lrt
+atapi_pt_helper_LDADD =  ${X_LIBS} -lxenstore -largo -lrt
 
 AM_CFLAGS=-g
 

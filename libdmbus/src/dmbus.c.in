@@ -15,7 +15,7 @@ typedef struct client_node
 
 struct dmbus_service
 {
-    v4v_addr_t addr;
+    xen_argo_addr_t addr;
     int fd;
     unsigned short service_id;
     client_node *client_list;
@@ -27,7 +27,7 @@ struct dmbus_client
 {
     client_node link; /* Must be first */
 
-    v4v_addr_t addr;
+    xen_argo_addr_t addr;
     int fd;
     void *priv;
     int domain;
@@ -63,7 +63,7 @@ static void client_list_remove(struct dmbus_client *c)
 
 void dmbus_cleanup(void)
 {
-    v4v_close(s->fd);
+    argo_close(s->fd);
     free(s);
     s = NULL;
 }
@@ -89,7 +89,7 @@ int dmbus_init(int service_id,
         return -1;
     }
 
-    s->fd = v4v_socket(SOCK_STREAM);
+    s->fd = argo_socket(SOCK_STREAM);
     if (s->fd == -1) {
         rc = -1;
         goto out_free;
@@ -97,15 +97,15 @@ int dmbus_init(int service_id,
     s->service_id = service_id;
     s->service_ops = service_ops;
 
-    s->addr.port = DMBUS_BASE_PORT + service_id;
-    s->addr.domain = V4V_DOMID_ANY;
+    s->addr.aport = DMBUS_BASE_PORT + service_id;
+    s->addr.domain_id = XEN_ARGO_DOMID_ANY;
 
-    rc = v4v_bind(s->fd, &s->addr, V4V_DOMID_ANY);
+    rc = argo_bind(s->fd, &s->addr, XEN_ARGO_DOMID_ANY);
     if (rc == -1) {
         goto out_close;
     }
 
-    rc = v4v_listen(s->fd, 128);
+    rc = argo_listen(s->fd, 128);
     if (rc == -1) {
         goto out_close;
     }
@@ -115,7 +115,7 @@ int dmbus_init(int service_id,
     return s->fd;
 
 out_close:
-    v4v_close(s->fd);
+    argo_close(s->fd);
 out_free:
     free(s);
     s = NULL;
@@ -160,8 +160,8 @@ static int recv_prologue(int fd, struct dmbus_conn_prologue *p)
             return -1;
         }
 
-        rc = v4v_recv(fd, (char *)p + b, sizeof (*p) - b, MSG_DONTWAIT);
-        if (rc < 0) /* v4v_recv() failed */
+        rc = argo_recv(fd, (char *)p + b, sizeof (*p) - b, MSG_DONTWAIT);
+        if (rc < 0) /* argo_recv() failed */
             return rc;
         if (rc == 0) { /* other end left */
             errno = EPIPE;
@@ -186,7 +186,7 @@ void dmbus_handle_connect(int fd)
     if (!c)
         return;
 
-    c->fd = v4v_accept(fd, &c->addr);
+    c->fd = argo_accept(fd, &c->addr);
     if (c->fd == -1) {
         free(c);
         return;
@@ -194,7 +194,7 @@ void dmbus_handle_connect(int fd)
 
     rc = recv_prologue(c->fd, &prologue);
     if (rc) {
-        v4v_close(c->fd);
+        argo_close(c->fd);
         free(c);
         return;
     }
@@ -215,14 +215,14 @@ void dmbus_handle_connect(int fd)
 
     if (s->service_ops->connect) {
         rc = s->service_ops->connect(c, c->domain, c->dev_type,
-                                     c->addr.domain,
+                                     c->addr.domain_id,
                                      c->fd,
                                      &c->rpc_ops,
                                      &c->priv);
 
         if (rc) {
             /* Connect failed */
-            v4v_close(c->fd);
+            argo_close(c->fd);
             free(c);
             return;
         }
@@ -240,12 +240,12 @@ void dmbus_client_disconnect(dmbus_client_t client)
     if (s->service_ops->disconnect)
         s->service_ops->disconnect(c, c->priv);
 
-    v4v_close(c->fd);
+    argo_close(c->fd);
     client_list_remove(c);
     free(c);
 }
 
-/* TODO: if v4v_send fails, we may want to tell the caller... */
+/* TODO: if argo_send fails, we may want to tell the caller... */
 static void send_msg(struct dmbus_client *c,
                      int msgtype,
                      void *data,
@@ -260,10 +260,10 @@ static void send_msg(struct dmbus_client *c,
 
     while (b < len) {
         /*
-         * Let's not let v4v_send crash the program: 
+         * Let's not let argo_send crash the program:
          * Use MSG_NOSIGNAL to avoid the SIGPIPE.
          */
-        rc = v4v_send(c->fd, data + b, len - b, MSG_NOSIGNAL);
+        rc = argo_send(c->fd, data + b, len - b, MSG_NOSIGNAL);
         if (rc == -1)
             return;
 
@@ -301,7 +301,7 @@ void dmbus_handle_events(dmbus_client_t client)
     struct dmbus_client *c = client;
     union dmbus_msg *m = (union dmbus_msg *)c->buff;
 
-    rc = v4v_recv(c->fd, c->buff + c->len, sizeof (c->buff) - c->len, MSG_DONTWAIT);
+    rc = argo_recv(c->fd, c->buff + c->len, sizeof (c->buff) - c->len, MSG_DONTWAIT);
     switch (rc) {
     case 0:
         dmbus_client_disconnect(client);

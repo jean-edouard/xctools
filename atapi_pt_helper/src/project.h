@@ -91,8 +91,8 @@
 #  include <xenstore.h>
 # endif
 
-# ifdef HAVE_LIBV4V_H
-#  include <libv4v.h>
+# ifdef HAVE_LIBARGO_H
+#  include <libargo.h>
 # endif
 
 #include "prototypes.h"

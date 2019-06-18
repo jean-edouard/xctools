@@ -44,7 +44,7 @@ bin_PROGRAMS = audio-daemon
 
 SRCS=audio-daemon.c ring.c alsa.c version.c
 audio_daemon_SOURCES = ${SRCS}
-audio_daemon_LDADD =  ${X_LIBS} -lxenstore -lv4v -lrt -lasound -ldl -lm -lpthread -lxenbackend -levent -lxenctrl -lxcxenstore -lspeex -lspeexdsp
+audio_daemon_LDADD =  ${X_LIBS} -lxenstore -largo -lrt -lasound -ldl -lm -lpthread -lxenbackend -levent -lxenctrl -lxcxenstore -lspeex -lspeexdsp
 
 AM_CFLAGS=-g
 

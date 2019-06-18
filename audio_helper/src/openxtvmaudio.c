@@ -20,7 +20,7 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
 
-#include "openxtv4v.h"
+#include "openxtargo.h"
 #include "openxtalsa.h"
 #include "openxtdebug.h"
 #include "openxtpackets.h"
@@ -33,20 +33,20 @@
 Settings *playback_settings = NULL;
 Settings *capture_settings = NULL;
 
-// Global V4V Packets
-V4VPacket snd_packet;
-V4VPacket rcv_packet;
+// Global Argo Packets
+ArgoPacket snd_packet;
+ArgoPacket rcv_packet;
 
-// GLobal V4V Connection
-V4VConnection *conn = NULL;
+// GLobal Argo Connection
+ArgoConnection *conn = NULL;
 
-// Global V4V Packet Playback Bodies
+// Global Argo Packet Playback Bodies
 OpenXTPlaybackPacket *playback_packet = NULL;
 OpenXTPlaybackInitAckPacket *playback_init_ack_packet = NULL;
 OpenXTPlaybackSetVolumePacket *playback_set_volume_packet = NULL;
 OpenXTPlaybackGetAvailableAckPacket *playback_get_available_ack_packet = NULL;
 
-// Global V4V Packet Capture Bodies
+// Global Argo Packet Capture Bodies
 OpenXTCapturePacket *capture_packet = NULL;
 OpenXTCaptureAckPacket *capture_ack_packet = NULL;
 OpenXTCaptureInitAckPacket *capture_init_ack_packet = NULL;
@@ -100,9 +100,9 @@ static int openxt_process_playback_init(void)
     playback_settings->valid = valid;
 
     // Setup the ack packet
-    ret = openxt_v4v_set_opcode(&snd_packet, OPENXT_PLAYBACK_INIT_ACK);
+    ret = openxt_argo_set_opcode(&snd_packet, OPENXT_PLAYBACK_INIT_ACK);
     openxt_assert_ret(ret == 0, ret, ret);
-    ret = openxt_v4v_set_length(&snd_packet, sizeof(OpenXTPlaybackInitAckPacket));
+    ret = openxt_argo_set_length(&snd_packet, sizeof(OpenXTPlaybackInitAckPacket));
     openxt_assert_ret(ret == 0, ret, ret);
 
     // Setup the ack body that will be sent back to QEMU. Specifically we need to
@@ -114,7 +114,7 @@ static int openxt_process_playback_init(void)
     playback_init_ack_packet->nchannels = playback_settings->nchannels;
 
     // Send the ack.
-    ret = openxt_v4v_send(conn, &snd_packet);
+    ret = openxt_argo_send(conn, &snd_packet);
     openxt_assert_ret(ret == sizeof(OpenXTPlaybackInitAckPacket), ret, ret);
 
     // Success
@@ -172,16 +172,16 @@ static int openxt_process_playback_get_available(void)
     int ret;
 
     // Setup the packet.
-    ret = openxt_v4v_set_opcode(&snd_packet, OPENXT_PLAYBACK_GET_AVAILABLE_ACK);
+    ret = openxt_argo_set_opcode(&snd_packet, OPENXT_PLAYBACK_GET_AVAILABLE_ACK);
     openxt_assert_ret(ret == 0, ret, ret);
-    ret = openxt_v4v_set_length(&snd_packet, sizeof(OpenXTPlaybackGetAvailableAckPacket));
+    ret = openxt_argo_set_length(&snd_packet, sizeof(OpenXTPlaybackGetAvailableAckPacket));
     openxt_assert_ret(ret == 0, ret, ret);
 
     // Fill in the packet's contents.
     playback_get_available_ack_packet->available = openxt_alsa_get_available(playback_settings);
 
     // Send the packet.
-    ret = openxt_v4v_send(conn, &snd_packet);
+    ret = openxt_argo_send(conn, &snd_packet);
     openxt_assert_ret(ret == sizeof(OpenXTPlaybackGetAvailableAckPacket), ret, ret);
 
     // Success
@@ -205,15 +205,15 @@ static int openxt_process_capture(void)
     openxt_assert_ret(nread >= 0, nread, nread);
 
     // Setup the packet.
-    ret = openxt_v4v_set_opcode(&snd_packet, OPENXT_CAPTURE_ACK);
+    ret = openxt_argo_set_opcode(&snd_packet, OPENXT_CAPTURE_ACK);
     openxt_assert_ret(ret == 0, ret, ret);
-    ret = openxt_v4v_set_length(&snd_packet, CAPTURE_ACK_PACKET_LENGTH(nread));
+    ret = openxt_argo_set_length(&snd_packet, CAPTURE_ACK_PACKET_LENGTH(nread));
     openxt_assert_ret(ret == 0, ret, ret);
 
     capture_ack_packet->num_samples = nread;
 
     // Send the packet.
-    ret = openxt_v4v_send(conn, &snd_packet);
+    ret = openxt_argo_send(conn, &snd_packet);
     openxt_assert_ret(ret == CAPTURE_ACK_PACKET_LENGTH(nread), ret, ret);
 
     // Success
@@ -232,9 +232,9 @@ static int openxt_process_capture_init(void)
     capture_settings->valid = valid;
 
     // Setup the ack packet
-    ret = openxt_v4v_set_opcode(&snd_packet, OPENXT_CAPTURE_INIT_ACK);
+    ret = openxt_argo_set_opcode(&snd_packet, OPENXT_CAPTURE_INIT_ACK);
     openxt_assert_ret(ret == 0, ret, ret);
-    ret = openxt_v4v_set_length(&snd_packet, sizeof(OpenXTCaptureInitAckPacket));
+    ret = openxt_argo_set_length(&snd_packet, sizeof(OpenXTCaptureInitAckPacket));
     openxt_assert_ret(ret == 0, ret, ret);
 
     // Setup the ack body that will be sent back to QEMU. Specifically we need to
@@ -246,7 +246,7 @@ static int openxt_process_capture_init(void)
     capture_init_ack_packet->nchannels = capture_settings->nchannels;
 
     // Send the ack.
-    ret = openxt_v4v_send(conn, &snd_packet);
+    ret = openxt_argo_send(conn, &snd_packet);
     openxt_assert_ret(ret == sizeof(OpenXTCaptureInitAckPacket), ret, ret);
 
     // Success
@@ -342,47 +342,47 @@ int openxt_vmaudio(int argc, char *argv[])
     snprintf(playback_settings->selement_name, MAX_NAME_LENGTH, "vm-%d", stubdomid - 1);
 
     // Cleanup memory (safety)
-    memset(&snd_packet, 0, sizeof(V4VPacket));
-    memset(&rcv_packet, 0, sizeof(V4VPacket));
+    memset(&snd_packet, 0, sizeof(ArgoPacket));
+    memset(&rcv_packet, 0, sizeof(ArgoPacket));
 
     // Pointer checks
-    openxt_checkp(playback_packet = openxt_v4v_get_body(&rcv_packet), -EINVAL);
-    openxt_checkp(playback_init_ack_packet = openxt_v4v_get_body(&snd_packet), -EINVAL);
-    openxt_checkp(playback_set_volume_packet = openxt_v4v_get_body(&rcv_packet), -EINVAL);
-    openxt_checkp(playback_get_available_ack_packet = openxt_v4v_get_body(&snd_packet), -EINVAL);
+    openxt_checkp(playback_packet = openxt_argo_get_body(&rcv_packet), -EINVAL);
+    openxt_checkp(playback_init_ack_packet = openxt_argo_get_body(&snd_packet), -EINVAL);
+    openxt_checkp(playback_set_volume_packet = openxt_argo_get_body(&rcv_packet), -EINVAL);
+    openxt_checkp(playback_get_available_ack_packet = openxt_argo_get_body(&snd_packet), -EINVAL);
 
     // Pointer checks
-    openxt_checkp(capture_packet = openxt_v4v_get_body(&rcv_packet), -EINVAL);
-    openxt_checkp(capture_ack_packet = openxt_v4v_get_body(&snd_packet), -EINVAL);
-    openxt_checkp(capture_init_ack_packet = openxt_v4v_get_body(&snd_packet), -EINVAL);
-    openxt_checkp(capture_get_available_ack_packet = openxt_v4v_get_body(&snd_packet), -EINVAL);
+    openxt_checkp(capture_packet = openxt_argo_get_body(&rcv_packet), -EINVAL);
+    openxt_checkp(capture_ack_packet = openxt_argo_get_body(&snd_packet), -EINVAL);
+    openxt_checkp(capture_init_ack_packet = openxt_argo_get_body(&snd_packet), -EINVAL);
+    openxt_checkp(capture_get_available_ack_packet = openxt_argo_get_body(&snd_packet), -EINVAL);
 
     // Size checks
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTPlaybackPacket)) == true, -EINVAL);
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTPlaybackInitAckPacket)) == true, -EINVAL);
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTPlaybackSetVolumePacket)) == true, -EINVAL);
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTPlaybackGetAvailableAckPacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTPlaybackPacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTPlaybackInitAckPacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTPlaybackSetVolumePacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTPlaybackGetAvailableAckPacket)) == true, -EINVAL);
 
     // Size checks
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTCapturePacket)) == true, -EINVAL);
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTCaptureAckPacket)) == true, -EINVAL);
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTCaptureInitAckPacket)) == true, -EINVAL);
-    openxt_assert(openxt_v4v_validate(sizeof(OpenXTCaptureGetAvailableAckPacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTCapturePacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTCaptureAckPacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTCaptureInitAckPacket)) == true, -EINVAL);
+    openxt_assert(openxt_argo_validate(sizeof(OpenXTCaptureGetAvailableAckPacket)) == true, -EINVAL);
 
-    // Setup V4V
-    conn = openxt_v4v_open(OPENXT_AUDIO_PORT, V4V_DOMID_ANY, V4V_PORT_NONE, stubdomid);
+    // Setup Argo
+    conn = openxt_argo_open(OPENXT_AUDIO_PORT, XEN_ARGO_DOMID_ANY, XEN_ARGO_PORT_NONE, stubdomid);
     openxt_assert_ret(conn != NULL, conn, -EINVAL);
 
     // Process incoming commands from QEMU in the stubdomain. Once we get a
     // "fini" command from QEMU, we know that we can stop executing.
     while (opcode != OPENXT_FINI) {
 
-        // Wait for a packet to come in from V4V
-        ret = openxt_v4v_recv(conn, &rcv_packet);
+        // Wait for a packet to come in from Argo
+        ret = openxt_argo_recv(conn, &rcv_packet);
         openxt_assert_ret(ret >= 0, ret, ret);
 
         // Process the packet
-        switch(opcode = openxt_v4v_get_opcode(&rcv_packet)) {
+        switch(opcode = openxt_argo_get_opcode(&rcv_packet)) {
 
             case OPENXT_FINI:
                 break;

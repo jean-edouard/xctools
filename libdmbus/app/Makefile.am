@@ -16,7 +16,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 #
 
-INCLUDES = -I$(srcdir)/../src  ${LIBV4V_INC}
+INCLUDES = -I$(srcdir)/../src  ${LIBARGO_INC}
 
 AM_CFLAGS=-g -W -Wall
 
@@ -25,15 +25,15 @@ noinst_PROGRAMS = server server_static client client_static
 
 
 server_SOURCES = server.c
-server_LDADD =../src/libdmbus.la ${LIBV4V_LIB}
+server_LDADD =../src/libdmbus.la ${LIBARGO_LIB}
 
 server_static_SOURCES = server.c
-server_static_LDADD =../src/libdmbus.la ${LIBV4V_LIB}
+server_static_LDADD =../src/libdmbus.la ${LIBARGO_LIB}
 server_static_LDFLAGS = -all-static
 
 client_SOURCES = client.c
-client_LDADD = ${LIBV4V_LIB}
+client_LDADD = ${LIBARGO_LIB}
 
 client_static_SOURCES = client.c
-client_static_LDADD = ${LIBV4V_LIB}
+client_static_LDADD = ${LIBARGO_LIB}
 client_static_LDFLAGS = -all-static

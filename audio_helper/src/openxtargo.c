@@ -20,23 +20,23 @@
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 //
 
-#include "openxtv4v.h"
+#include "openxtargo.h"
 #include "openxtdebug.h"
 
 ///
-/// This is the main function to setup your V4V connection to another domain.
+/// This is the main function to setup your Argo connection to another domain.
 /// The following provides suggested arguments for this function:
 ///
 /// Clients
-/// - local port = V4V_PORT_NONE
-/// - local domid = V4V_DOMID_ANY
+/// - local port = XEN_ARGO_PORT_NONE
+/// - local domid = XEN_ARGO_DOMID_ANY
 /// - remote port = <port #>
 /// - remote domid = <server domid, likely == 0>
 ///
 /// Servers
 /// - local port = <port #>
-/// - local domid = V4V_DOMID_ANY
-/// - remote port = V4V_PORT_NONE
+/// - local domid = XEN_ARGO_DOMID_ANY
+/// - remote port = XEN_ARGO_PORT_NONE
 /// - remote domid = <client domid>
 ///
 /// @param lport local port
@@ -46,26 +46,26 @@
 ///
 /// @return NULL on failure, valid pointer on success
 ///
-V4VConnection *openxt_v4v_open(int32_t lport, int32_t ldomid, int32_t rport, int32_t rdomid)
+ArgoConnection *openxt_argo_open(int32_t lport, int32_t ldomid, int32_t rport, int32_t rdomid)
 {
     // Create a new connection structure
-    V4VConnection *conn = calloc(1, sizeof(V4VConnection));
+    ArgoConnection *conn = calloc(1, sizeof(ArgoConnection));
     openxt_checkp(conn, NULL);
 
     // Initialize the connection for safety.
     conn->fd = -1;
     conn->connected = false;
-    conn->local_addr.port = lport;
-    conn->local_addr.domain = ldomid;
-    conn->remote_addr.port = rport;
-    conn->remote_addr.domain = rdomid;
+    conn->local_addr.aport = lport;
+    conn->local_addr.domain_id = ldomid;
+    conn->remote_addr.aport = rport;
+    conn->remote_addr.domain_id = rdomid;
 
-    // Attempt to open a V4V socket
-    if((conn->fd = v4v_socket(SOCK_DGRAM)) <= 0)
+    // Attempt to open a Argo socket
+    if((conn->fd = argo_socket(SOCK_DGRAM)) <= 0)
         goto failure;
 
-    // Bind to V4V
-    if(v4v_bind(conn->fd, &conn->local_addr, conn->remote_addr.domain) != 0)
+    // Bind to Argo
+    if(argo_bind(conn->fd, &conn->local_addr, conn->remote_addr.domain_id) != 0)
         goto failure;
 
     // We are now connected
@@ -88,16 +88,16 @@ failure:
 ///
 /// The following is for internal use only.
 ///
-int openxt_v4v_close_internal(V4VConnection *conn)
+int openxt_argo_close_internal(ArgoConnection *conn)
 {
     int ret = 0;
 
     // Sanity checks
     openxt_checkp(conn, -EINVAL);
 
-    // Close V4V
+    // Close Argo
     if (conn->fd >= 0)
-        ret = v4v_close(conn->fd);
+        ret = argo_close(conn->fd);
 
     // We are no longer connected
     conn->fd = -1;
@@ -108,18 +108,18 @@ int openxt_v4v_close_internal(V4VConnection *conn)
 }
 
 ///
-/// Once you are done with V4V, run this function. Note that this function
+/// Once you are done with Argo, run this function. Note that this function
 /// could be called by this API if something bad happens.
 ///
 /// Note that this free's conn, so don't call it twice :)
 ///
 /// @return -EINVAL if conn == NULL,
-///          negative error code on failure of v4v_close,
+///          negative error code on failure of argo_close,
 ///          0 on success
 ///
-int openxt_v4v_close(V4VConnection *conn)
+int openxt_argo_close(ArgoConnection *conn)
 {
-    int ret = openxt_v4v_close_internal(conn);
+    int ret = openxt_argo_close_internal(conn);
 
     // Sanity checks
     openxt_checkp(conn, -EINVAL);
@@ -132,12 +132,12 @@ int openxt_v4v_close(V4VConnection *conn)
 }
 
 ///
-/// The following function will tell you if the V4V socket is open and
+/// The following function will tell you if the Argo socket is open and
 /// connected
 ///
 /// @return true = connected, false = disconnected or conn == NULL
 ///
-bool openxt_v4v_isconnected(V4VConnection *conn)
+bool openxt_argo_isconnected(ArgoConnection *conn)
 {
     // Sanity checks
     openxt_checkp(conn, false);
@@ -148,15 +148,15 @@ bool openxt_v4v_isconnected(V4VConnection *conn)
 
 ///
 /// The following can be used as a safety to make sure that your packets are
-/// not bigger than a V4V packet. This way you can use the packet structures
+/// not bigger than a Argo packet. This way you can use the packet structures
 /// all you want later without fear of buffer overflows.
 ///
 /// @param size the size of your packet
 /// @return true = safe, false = unsafe (likely will overflow)
 ///
-bool openxt_v4v_validate(int32_t size)
+bool openxt_argo_validate(int32_t size)
 {
-    return size <= V4V_MAX_PACKET_BODY_SIZE;
+    return size <= ARGO_MAX_PACKET_BODY_SIZE;
 }
 
 ///
@@ -167,7 +167,7 @@ bool openxt_v4v_validate(int32_t size)
 ///
 /// @return -EINVAL if packet == NULL, 0 on success
 ///
-int openxt_v4v_set_opcode(V4VPacket *packet, int32_t opcode)
+int openxt_argo_set_opcode(ArgoPacket *packet, int32_t opcode)
 {
     // Sanity checks
     openxt_checkp(packet, -EINVAL);
@@ -187,14 +187,14 @@ int openxt_v4v_set_opcode(V4VPacket *packet, int32_t opcode)
 ///
 /// @return -EINVAL if packet == NULL, -EOVERFLOW if the length is too large, 0 on success
 ///
-int openxt_v4v_set_length(V4VPacket *packet, int32_t length)
+int openxt_argo_set_length(ArgoPacket *packet, int32_t length)
 {
     // Sanity checks
     openxt_checkp(packet, -EINVAL);
-    openxt_assert(length <= V4V_MAX_PACKET_BODY_SIZE, -EOVERFLOW);
+    openxt_assert(length <= ARGO_MAX_PACKET_BODY_SIZE, -EOVERFLOW);
 
     // Set the opcode of the packet
-    packet->header.length = length + sizeof(V4VPacketHeader);
+    packet->header.length = length + sizeof(ArgoPacketHeader);
 
     // Success
     return 0;
@@ -207,7 +207,7 @@ int openxt_v4v_set_length(V4VPacket *packet, int32_t length)
 ///
 /// @return -EINVAL if packet == NULL, opcode on success
 ///
-int openxt_v4v_get_opcode(V4VPacket *packet)
+int openxt_argo_get_opcode(ArgoPacket *packet)
 {
     // Sanity checks
     openxt_checkp(packet, -EINVAL);
@@ -223,13 +223,13 @@ int openxt_v4v_get_opcode(V4VPacket *packet)
 ///
 /// @return -EINVAL if packet == NULL, length on success
 ///
-int openxt_v4v_get_length(V4VPacket *packet)
+int openxt_argo_get_length(ArgoPacket *packet)
 {
     // Sanity checks
     openxt_checkp(packet, -EINVAL);
 
     // Success
-    return packet->header.length - sizeof(V4VPacketHeader);
+    return packet->header.length - sizeof(ArgoPacketHeader);
 }
 
 ///
@@ -238,23 +238,23 @@ int openxt_v4v_get_length(V4VPacket *packet)
 ///
 /// @code
 ///
-/// V4VPacket snd_packet;
-/// MyPacket *packet = openxt_v4v_get_body(&snd_packet);
+/// ArgoPacket snd_packet;
+/// MyPacket *packet = openxt_argo_get_body(&snd_packet);
 ///
 /// packet->data1 = data1;
 /// packet->data2 = data2;
 ///
-/// openxt_v4v_set_opcode(&snd_packet, opcode);
-/// openxt_v4v_set_length(&snd_packet, sizeof(MyPacket));
+/// openxt_argo_set_opcode(&snd_packet, opcode);
+/// openxt_argo_set_length(&snd_packet, sizeof(MyPacket));
 ///
-/// openxt_v4v_send(conn, &snd_packet);
+/// openxt_argo_send(conn, &snd_packet);
 ///
 /// @endcode
 ///
 /// @param packet the packet that you want body access to
 /// @return NULL = packet == NULL, valid pointer on success
 ///
-void *openxt_v4v_get_body(V4VPacket *packet)
+void *openxt_argo_get_body(ArgoPacket *packet)
 {
     // Sanity checks
     openxt_checkp(packet, NULL);
@@ -264,18 +264,18 @@ void *openxt_v4v_get_body(V4VPacket *packet)
 }
 
 ///
-/// The following function will send a V4V packet.
+/// The following function will send a Argo packet.
 ///
-/// @param conn the V4V connection created using openxt_v4v_open.
+/// @param conn the Argo connection created using openxt_argo_open.
 /// @param packet the packet to send
 ///
 /// @return -EINVAL if conn or packet == NULL,
 ///         -EOVERFLOW if the packet length is too large,
 ///         -ENODEV if conn is closed,
-///          negative errno if v4v_sendto fails,
+///          negative errno if argo_sendto fails,
 ///          ret >= 0 on success representing number of bytes sent
 ///
-int openxt_v4v_send(V4VConnection *conn, V4VPacket *packet)
+int openxt_argo_send(ArgoConnection *conn, ArgoPacket *packet)
 {
     // Local variables
     int ret;
@@ -283,53 +283,53 @@ int openxt_v4v_send(V4VConnection *conn, V4VPacket *packet)
     // Sanity checks
     openxt_checkp(conn, -EINVAL);
     openxt_checkp(packet, -EINVAL);
-    openxt_assert(openxt_v4v_get_length(packet) <= V4V_MAX_PACKET_BODY_SIZE, -EOVERFLOW);
+    openxt_assert(openxt_argo_get_length(packet) <= ARGO_MAX_PACKET_BODY_SIZE, -EOVERFLOW);
 
     // Make sure that we are actually connected. Note that we make this a
     // quite failure because if a problem happens, we will close the connection
     // and it's possible that the code might continue attempting to send, and
     // we do not want to kill performance by logging a ton of error messages
-    openxt_assert_quiet(openxt_v4v_isconnected(conn) == true, -ENODEV);
+    openxt_assert_quiet(openxt_argo_isconnected(conn) == true, -ENODEV);
 
     // Send the packet. Note that we handle printing useful error messages
     // here. All the user should have to do, is validate that the send was
     // successful
-    ret = v4v_sendto(conn->fd, (char *)packet, packet->header.length, 0, &conn->remote_addr);
+    ret = argo_sendto(conn->fd, (char *)packet, packet->header.length, 0, &conn->remote_addr);
     if (ret <= 0) {
 
         switch (ret) {
 
             // Failed to send anything
             case 0:
-                openxt_warn("failed openxt_v4v_send, wrote 0 bytes: %d - %s\n", errno, strerror(errno));
-                openxt_v4v_close_internal(conn);
+                openxt_warn("failed openxt_argo_send, wrote 0 bytes: %d - %s\n", errno, strerror(errno));
+                openxt_argo_close_internal(conn);
                 return -errno;
 
             // Error
             default:
-                openxt_warn("failed openxt_v4v_send: %d - %s\n", errno, strerror(errno));
-                openxt_v4v_close_internal(conn);
+                openxt_warn("failed openxt_argo_send: %d - %s\n", errno, strerror(errno));
+                openxt_argo_close_internal(conn);
                 return -errno;
         }
     }
 
     // Success
-    return ret - sizeof(V4VPacketHeader);
+    return ret - sizeof(ArgoPacketHeader);
 }
 
 ///
-/// The following function will send a V4V packet.
+/// The following function will send a Argo packet.
 ///
-/// @param conn the V4V connection created using openxt_v4v_open.
+/// @param conn the Argo connection created using openxt_argo_open.
 /// @param packet the packet to send
 ///
 /// @return -EINVAL if conn or packet == NULL,
 ///         -EIO if the received packet length != length in header,
 ///         -ENODEV if conn is closed,
-///          negative errno if v4v_recvfrom fails,
+///          negative errno if argo_recvfrom fails,
 ///          ret >= 0 on success representing number of bytes received
 ///
-int openxt_v4v_recv(V4VConnection *conn, V4VPacket *packet)
+int openxt_argo_recv(ArgoConnection *conn, ArgoPacket *packet)
 {
     // Local variables
     int ret;
@@ -342,26 +342,26 @@ int openxt_v4v_recv(V4VConnection *conn, V4VPacket *packet)
     // quite failure because if a problem happens, we will close the connection
     // and it's possible that the code might continue attempting to send, and
     // we do not want to kill performance by logging a ton of error messages
-    openxt_assert_quiet(openxt_v4v_isconnected(conn) == true, -ENODEV);
+    openxt_assert_quiet(openxt_argo_isconnected(conn) == true, -ENODEV);
 
     // Send the packet. Note that we handle printing useful error messages
     // here. All the user should have to do, is validate that the send was
     // successful
-    ret = v4v_recvfrom(conn->fd, (char *)packet, sizeof(V4VPacket), 0, &conn->remote_addr);
+    ret = argo_recvfrom(conn->fd, (char *)packet, sizeof(ArgoPacket), 0, &conn->remote_addr);
     if (ret <= 0) {
 
         switch (ret) {
 
             // Failed to receive anything
             case 0:
-                openxt_warn("failed openxt_v4v_recv, read 0 bytes: %d - %s\n", errno, strerror(errno));
-                openxt_v4v_close_internal(conn);
+                openxt_warn("failed openxt_argo_recv, read 0 bytes: %d - %s\n", errno, strerror(errno));
+                openxt_argo_close_internal(conn);
                 return -errno;
 
             // Error
             default:
-                openxt_warn("failed openxt_v4v_recv: %d - %s\n", errno, strerror(errno));
-                openxt_v4v_close_internal(conn);
+                openxt_warn("failed openxt_argo_recv: %d - %s\n", errno, strerror(errno));
+                openxt_argo_close_internal(conn);
                 return -errno;
         }
     }
@@ -370,11 +370,11 @@ int openxt_v4v_recv(V4VConnection *conn, V4VPacket *packet)
     // amount of data that we read, is equal to the amount of data that the
     // packet should have returned. If it is not, we have an error
     if (packet->header.length != ret) {
-        openxt_warn("failed openxt_v4v_recv: length mismatch %d - %d\n", packet->header.length, ret);
-        openxt_v4v_close_internal(conn);
+        openxt_warn("failed openxt_argo_recv: length mismatch %d - %d\n", packet->header.length, ret);
+        openxt_argo_close_internal(conn);
         return -EIO;
     }
 
     // Success
-    return ret - sizeof(V4VPacketHeader);
+    return ret - sizeof(ArgoPacketHeader);
 }

@@ -40,9 +40,9 @@ noinst_HEADERS=project.h prototypes.h
 
 bin_PROGRAMS = audio_helper
 
-SRCS=main.c version.c openxtalsa.c openxtdebug.c openxtmixerctl.c openxtv4v.c openxtvmaudio.c unittest.c
+SRCS=main.c version.c openxtalsa.c openxtdebug.c openxtmixerctl.c openxtargo.c openxtvmaudio.c unittest.c
 audio_helper_SOURCES = ${SRCS}
-audio_helper_LDADD = -lv4v -lasound -lm
+audio_helper_LDADD = -largo -lasound -lm
 
 AM_CFLAGS=-g
 

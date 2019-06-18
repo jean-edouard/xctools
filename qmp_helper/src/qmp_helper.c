@@ -1,7 +1,7 @@
 /* qmp_helper.c
  *
  * QMP toolstack to stubdomain helper. This simple helper proxies a QMP
- * traffic between a local UNIX socket and a remote V4V QMP chardrv QEMU in
+ * traffic between a local UNIX socket and a remote Argo QMP chardrv QEMU in
  * the stubdomain.
  *
  * Copyright (c) 2016 Assured Information Security, Ross Philipson <philipsonr@ainfosec.com>
@@ -37,8 +37,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/param.h>
 #include <syslog.h>
-#include <libv4v.h>
+#include <libargo.h>
 
 /**
  * QMPH_LOG: information to always log (errors & important low-volume events)
@@ -51,28 +52,31 @@ do {                                                                 \
                  ##__VA_ARGS__);                                     \
     } while (0)
 
-#define V4V_TYPE 'W'
-#define V4VIOCSETRINGSIZE       _IOW (V4V_TYPE,  1, uint32_t)
+#define ARGO_TYPE 'W'
+#define ARGOIOCSETRINGSIZE       _IOW (ARGO_TYPE,  1, uint32_t)
 
-#define V4V_QH_PORT 5100
-#define V4V_CHARDRV_PORT 15100
-#define V4V_CHARDRV_RING_SIZE \
-  (V4V_ROUNDUP((((4096)*4) - sizeof(v4v_ring_t)-V4V_ROUNDUP(1))))
+#define XEN_ARGO_MSG_SLOT_SIZE 0x10
+#define XEN_ARGO_ROUNDUP(a) roundup((a), XEN_ARGO_MSG_SLOT_SIZE)
 
-#define V4V_CHARDRV_NAME  "[v4v-chardrv]"
+#define ARGO_QH_PORT 5100
+#define ARGO_CHARDRV_PORT 15100
+#define ARGO_CHARDRV_RING_SIZE \
+  (XEN_ARGO_ROUNDUP((((4096)*4) - sizeof(xen_argo_ring_t)-XEN_ARGO_ROUNDUP(1))))
 
-#define V4V_MAGIC_CONNECT    "live"
-#define V4V_MAGIC_DISCONNECT "dead"
+#define ARGO_CHARDRV_NAME  "[argo-chardrv]"
+
+#define ARGO_MAGIC_CONNECT    "live"
+#define ARGO_MAGIC_DISCONNECT "dead"
 
 struct qmp_helper_state {
     int guest_id;
     int stubdom_id;
-    int v4v_fd;
-    v4v_addr_t remote_addr;
-    v4v_addr_t local_addr;
+    int argo_fd;
+    xen_argo_addr_t remote_addr;
+    xen_argo_addr_t local_addr;
     int listen_fd;
     int unix_fd;
-    uint8_t msg_buf[V4V_CHARDRV_RING_SIZE];
+    uint8_t msg_buf[ARGO_CHARDRV_RING_SIZE];
 };
 
 /* global helper state */
@@ -91,16 +95,16 @@ static void qmph_exit_cleanup(int exit_code)
     /* Done listening */
     close(qhs.listen_fd);
 
-    /* close v4v channel to stubdom */
-    v4v_close(qhs.v4v_fd);
-    qhs.v4v_fd = -1;
+    /* close argo channel to stubdom */
+    argo_close(qhs.argo_fd);
+    qhs.argo_fd = -1;
 
     closelog();
 
     exit(exit_code);
 }
 
-static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
+static int qmph_unix_to_argo(struct qmp_helper_state *pqhs)
 {
     int ret, rcv;
 
@@ -112,17 +116,17 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
     }
     else if (rcv == 0) {
         QMPH_LOG("read(unix_fd) recieved EOF, telling qemu.\n");
-        ret = v4v_sendto(pqhs->v4v_fd, V4V_MAGIC_DISCONNECT,
+        ret = argo_sendto(pqhs->argo_fd, ARGO_MAGIC_DISCONNECT,
                          4, 0, &pqhs->remote_addr);
         close(pqhs->unix_fd);
         pqhs->unix_fd = -1;
         return ENOTCONN;
     }
 
-    ret = v4v_sendto(pqhs->v4v_fd, pqhs->msg_buf,
+    ret = argo_sendto(pqhs->argo_fd, pqhs->msg_buf,
                      rcv, 0, &pqhs->remote_addr);
     if (ret != rcv) {
-        QMPH_LOG("ERROR v4v_sendto() failed (%s) - %d %d.\n",
+        QMPH_LOG("ERROR argo_sendto() failed (%s) - %d %d.\n",
                  strerror(errno), ret, rcv);
         return -1;
     }
@@ -130,14 +134,14 @@ static int qmph_unix_to_v4v(struct qmp_helper_state *pqhs)
     return 0;
 }
 
-static int qmph_v4v_to_unix(struct qmp_helper_state *pqhs)
+static int qmph_argo_to_unix(struct qmp_helper_state *pqhs)
 {
     int ret, rcv;
 
-    rcv = v4v_recvfrom(pqhs->v4v_fd, pqhs->msg_buf, sizeof(pqhs->msg_buf),
+    rcv = argo_recvfrom(pqhs->argo_fd, pqhs->msg_buf, sizeof(pqhs->msg_buf),
                        0, &pqhs->remote_addr);
     if (rcv < 0) {
-        QMPH_LOG("ERROR v4v_recvfrom() failed (%s) - %d.\n",
+        QMPH_LOG("ERROR argo_recvfrom() failed (%s) - %d.\n",
                  strerror(errno), rcv);
         return rcv;
     }
@@ -152,37 +156,37 @@ static int qmph_v4v_to_unix(struct qmp_helper_state *pqhs)
     return 0;
 }
 
-static int qmph_init_v4v_socket(struct qmp_helper_state *pqhs)
+static int qmph_init_argo_socket(struct qmp_helper_state *pqhs)
 {
-    uint32_t v4v_ring_size = V4V_CHARDRV_RING_SIZE;
+    uint32_t argo_ring_size = ARGO_CHARDRV_RING_SIZE;
 
-    pqhs->v4v_fd = v4v_socket(SOCK_DGRAM);
-    if (pqhs->v4v_fd == -1) {
-        QMPH_LOG("ERROR unable to create a v4vsocket");
+    pqhs->argo_fd = argo_socket(SOCK_DGRAM);
+    if (pqhs->argo_fd == -1) {
+        QMPH_LOG("ERROR unable to create a argosocket");
         return -1;
     }
 
-    pqhs->local_addr.port = V4V_QH_PORT;
-    pqhs->local_addr.domain = 0;
+    pqhs->local_addr.aport = ARGO_QH_PORT;
+    pqhs->local_addr.domain_id = 0;
 
-    pqhs->remote_addr.port = V4V_CHARDRV_PORT;
-    pqhs->remote_addr.domain = pqhs->stubdom_id;
+    pqhs->remote_addr.aport = ARGO_CHARDRV_PORT;
+    pqhs->remote_addr.domain_id = pqhs->stubdom_id;
 
-    if (ioctl(pqhs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size) == -1) {
-        QMPH_LOG("ERROR unable to send ioctl V4VIOCSETRINGSIZE to v4vsocket");
+    if (ioctl(pqhs->argo_fd, ARGOIOCSETRINGSIZE, &argo_ring_size) == -1) {
+        QMPH_LOG("ERROR unable to send ioctl ARGOIOCSETRINGSIZE to argosocket");
         goto err;
     }
 
-    if (v4v_bind(pqhs->v4v_fd, &pqhs->local_addr, pqhs->stubdom_id) == -1) {
-        QMPH_LOG("ERROR unable to bind the v4vsocket");
+    if (argo_bind(pqhs->argo_fd, &pqhs->local_addr, pqhs->stubdom_id) == -1) {
+        QMPH_LOG("ERROR unable to bind the argosocket");
         goto err;
     }
 
     return 0;
 
 err:
-    v4v_close(pqhs->v4v_fd);
-    pqhs->v4v_fd = -1;
+    argo_close(pqhs->argo_fd);
+    pqhs->argo_fd = -1;
     return -1;
 }
 
@@ -301,13 +305,13 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, qmph_signal_handler);
 
-    ret = qmph_init_v4v_socket(&qhs);
+    ret = qmph_init_argo_socket(&qhs);
     if (ret) {
-        QMPH_LOG("ERROR failed to init v4v socket - ret: %d\n", ret);
+        QMPH_LOG("ERROR failed to init argo socket - ret: %d\n", ret);
         return -1;
     }
 
-    QMPH_LOG("v4v ready, wait for a connection...");
+    QMPH_LOG("argo ready, wait for a connection...");
 
     /* Ready to listen and accept one connection. Note this will block on
      * accept until connected.
@@ -321,9 +325,9 @@ int main(int argc, char *argv[])
     while (!pending_exit) {
 
         FD_ZERO(&rfds);
-        FD_SET(qhs.v4v_fd, &rfds);
+        FD_SET(qhs.argo_fd, &rfds);
         FD_SET(qhs.unix_fd, &rfds);
-        nfds = ((qhs.v4v_fd > qhs.unix_fd) ? qhs.v4v_fd : qhs.unix_fd) + 1;
+        nfds = ((qhs.argo_fd > qhs.unix_fd) ? qhs.argo_fd : qhs.unix_fd) + 1;
 
         if (select(nfds, &rfds, NULL, NULL, NULL) == -1) {
             ret = errno;
@@ -332,7 +336,7 @@ int main(int argc, char *argv[])
         }
 
         if (FD_ISSET(qhs.unix_fd, &rfds)) {
-            ret = qmph_unix_to_v4v(&qhs);
+            ret = qmph_unix_to_argo(&qhs);
             if (ret == ENOTCONN) {
 	        ret = qmph_accept_unix_socket(&qhs);
                 if (ret) {
@@ -340,15 +344,15 @@ int main(int argc, char *argv[])
                     qmph_exit_cleanup(ret);
                 }
                 QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
-                ret = v4v_sendto(qhs.v4v_fd, V4V_MAGIC_CONNECT,
+                ret = argo_sendto(qhs.argo_fd, ARGO_MAGIC_CONNECT,
                                  4, 0, &qhs.remote_addr);
             }
             else if (ret != 0)
                 break; /* abject misery */
         }
 
-        if (FD_ISSET(qhs.v4v_fd, &rfds)) {
-            if (qmph_v4v_to_unix(&qhs))
+        if (FD_ISSET(qhs.argo_fd, &rfds)) {
+            if (qmph_argo_to_unix(&qhs))
                 break; /* total death */
         }
     }

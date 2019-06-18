@@ -27,7 +27,7 @@ bin_PROGRAMS = qmp_helper
 
 SRCS=qmp_helper.c version.c
 qmp_helper_SOURCES = ${SRCS}
-qmp_helper_LDADD =  ${X_LIBS} -lv4v
+qmp_helper_LDADD =  ${X_LIBS} -largo
 
 AM_CFLAGS=-g
 

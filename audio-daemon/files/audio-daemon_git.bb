@@ -1,7 +1,7 @@
 DESCRIPTION = "pv audio backend"
 LICENSE = "GPLv2"
 LIC_FILES_CHKSUM = "file://COPYING;md5=4641e94ec96f98fabc56ff9cc48be14b"
-DEPENDS = " libv4v speex libevent libxcxenstore libxenbackend alsa-lib "
+DEPENDS = " libargo speex libevent libxcxenstore libxenbackend alsa-lib "
 
 PV = "0+git${SRCPV}"
 

@@ -43,7 +43,7 @@ bin_PROGRAMS = pci-dm-helper
 
 SRCS=pci-dm-helper.c util.c
 pci_dm_helper_SOURCES = ${SRCS}
-pci_dm_helper_LDADD =  ${LIBV4V_LIB} ${PCI_LIBS} ${LIBXCXENSTORE_LIBS} \
+pci_dm_helper_LDADD =  ${LIBARGO_LIB} ${PCI_LIBS} ${LIBXCXENSTORE_LIBS} \
 					   ${LIBEVENT_LIB} ${LIBXC_LIB}
 pci_dm_helper_CFLAGS = ${LIBXCXENSTORE_CFLAGS} ${LIBEVENT_INC} \
 					   ${LIBXC_INC} \

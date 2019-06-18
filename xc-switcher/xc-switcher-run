@@ -18,4 +18,4 @@
 #
 
 vm_path=$(ps ax | grep 'xen_vm_path' | sed -rn 's/^.*xen_vm_path:([^:]+):/\1/p' | grep '/vm')
-INET_IS_V4V=1 LD_PRELOAD=@LIBDIR@/libv4v-1.0.so.0 DBUS_SYSTEM_BUS_ADDRESS=tcp:host=1.0.0.0,port=5556 xc-switcher.bin "${vm_path}"
+INET_IS_ARGO=1 LD_PRELOAD=@LIBDIR@/libargo-1.0.so.0 DBUS_SYSTEM_BUS_ADDRESS=tcp:host=1.0.0.0,port=5556 xc-switcher.bin "${vm_path}"

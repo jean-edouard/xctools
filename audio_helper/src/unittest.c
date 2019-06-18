@@ -22,7 +22,7 @@
 
 #include "unittest.h"
 
-#include "openxtv4v.h"
+#include "openxtargo.h"
 #include "openxtalsa.h"
 #include "openxtdebug.h"
 
@@ -44,14 +44,14 @@ typedef struct TestPacket {
 
 } TestPacket;
 
-void test_v4v(void)
+void test_argo(void)
 {
-    V4VConnection *client = NULL;
-    V4VConnection *server = NULL;
+    ArgoConnection *client = NULL;
+    ArgoConnection *server = NULL;
 
     // Packets
-    V4VPacket snd_packet;
-    V4VPacket rcv_packet;
+    ArgoPacket snd_packet;
+    ArgoPacket rcv_packet;
     TestPacket *snd_packet_body = NULL;
     TestPacket *rcv_packet_body = NULL;
 
@@ -61,69 +61,69 @@ void test_v4v(void)
 
     // TODO: The following still needs testing:
     //
-    // - I currently am not testing invalid arguments to openxt_v4v_open. This
-    //   one is hard as V4V doesn't really check things on it's own
+    // - I currently am not testing invalid arguments to openxt_argo_open. This
+    //   one is hard as Argo doesn't really check things on it's own
 
     // Make sure the validate function works
-    UT_CHECK(openxt_v4v_validate(sizeof(TestPacket)) == true);
-    UT_CHECK(openxt_v4v_validate(V4V_MAX_PACKET_BODY_SIZE * 2) == false);
+    UT_CHECK(openxt_argo_validate(sizeof(TestPacket)) == true);
+    UT_CHECK(openxt_argo_validate(ARGO_MAX_PACKET_BODY_SIZE * 2) == false);
 
     // Make sure that we hit the correct errors
-    UT_CHECK(openxt_v4v_isconnected(NULL) == false);
-    UT_CHECK(openxt_v4v_isconnected(NULL) == false);
+    UT_CHECK(openxt_argo_isconnected(NULL) == false);
+    UT_CHECK(openxt_argo_isconnected(NULL) == false);
 
     // We should not be connected
-    UT_CHECK(openxt_v4v_isconnected(client) == false);
-    UT_CHECK(openxt_v4v_isconnected(server) == false);
+    UT_CHECK(openxt_argo_isconnected(client) == false);
+    UT_CHECK(openxt_argo_isconnected(server) == false);
 
     // Valid setup
-    UT_CHECK((client = openxt_v4v_open(V4V_PORT_NONE, V4V_DOMID_ANY, 5001, 0)) != NULL);
-    UT_CHECK((server = openxt_v4v_open(5001, V4V_DOMID_ANY, V4V_PORT_NONE, 0)) != NULL);
+    UT_CHECK((client = openxt_argo_open(XEN_ARGO_PORT_NONE, XEN_ARGO_DOMID_ANY, 5001, 0)) != NULL);
+    UT_CHECK((server = openxt_argo_open(5001, XEN_ARGO_DOMID_ANY, XEN_ARGO_PORT_NONE, 0)) != NULL);
 
     // Make sure that we are connected
-    UT_CHECK(openxt_v4v_isconnected(client) == true);
-    UT_CHECK(openxt_v4v_isconnected(server) == true);
+    UT_CHECK(openxt_argo_isconnected(client) == true);
+    UT_CHECK(openxt_argo_isconnected(server) == true);
 
     // Make sure that we hit the correct errors
-    UT_CHECK(openxt_v4v_close(NULL) == -EINVAL);
-    UT_CHECK(openxt_v4v_close(NULL) == -EINVAL);
+    UT_CHECK(openxt_argo_close(NULL) == -EINVAL);
+    UT_CHECK(openxt_argo_close(NULL) == -EINVAL);
 
     // Make sure that we can close the connection
-    UT_CHECK(openxt_v4v_close(client) == 0);
-    UT_CHECK(openxt_v4v_close(server) == 0);
+    UT_CHECK(openxt_argo_close(client) == 0);
+    UT_CHECK(openxt_argo_close(server) == 0);
 
     // Setup again
-    UT_CHECK((client = openxt_v4v_open(V4V_PORT_NONE, V4V_DOMID_ANY, 5001, 0)) != NULL);
-    UT_CHECK((server = openxt_v4v_open(5001, V4V_DOMID_ANY, V4V_PORT_NONE, 0)) != NULL);
+    UT_CHECK((client = openxt_argo_open(XEN_ARGO_PORT_NONE, XEN_ARGO_DOMID_ANY, 5001, 0)) != NULL);
+    UT_CHECK((server = openxt_argo_open(5001, XEN_ARGO_DOMID_ANY, XEN_ARGO_PORT_NONE, 0)) != NULL);
 
     // Make sure that we hit the correct errors
-    UT_CHECK(openxt_v4v_set_opcode(NULL, 0) == -EINVAL);
-    UT_CHECK(openxt_v4v_set_length(NULL, 0) == -EINVAL);
-    UT_CHECK(openxt_v4v_set_length(&snd_packet, V4V_MAX_PACKET_BODY_SIZE * 2) == -EOVERFLOW);
+    UT_CHECK(openxt_argo_set_opcode(NULL, 0) == -EINVAL);
+    UT_CHECK(openxt_argo_set_length(NULL, 0) == -EINVAL);
+    UT_CHECK(openxt_argo_set_length(&snd_packet, ARGO_MAX_PACKET_BODY_SIZE * 2) == -EOVERFLOW);
 
     // Set the length and opcode
-    UT_CHECK(openxt_v4v_set_opcode(&snd_packet, 5) == 0);
-    UT_CHECK(openxt_v4v_set_opcode(&rcv_packet, 5) == 0);
-    UT_CHECK(openxt_v4v_set_length(&snd_packet, sizeof(TestPacket)) == 0);
-    UT_CHECK(openxt_v4v_set_length(&rcv_packet, sizeof(TestPacket)) == 0);
+    UT_CHECK(openxt_argo_set_opcode(&snd_packet, 5) == 0);
+    UT_CHECK(openxt_argo_set_opcode(&rcv_packet, 5) == 0);
+    UT_CHECK(openxt_argo_set_length(&snd_packet, sizeof(TestPacket)) == 0);
+    UT_CHECK(openxt_argo_set_length(&rcv_packet, sizeof(TestPacket)) == 0);
 
     // Make sure that we hit the correct errors
-    UT_CHECK(openxt_v4v_get_opcode(NULL) == -EINVAL);
-    UT_CHECK(openxt_v4v_get_length(NULL) == -EINVAL);
+    UT_CHECK(openxt_argo_get_opcode(NULL) == -EINVAL);
+    UT_CHECK(openxt_argo_get_length(NULL) == -EINVAL);
 
     // Set the length and opcode
-    UT_CHECK(openxt_v4v_get_opcode(&snd_packet) == 5);
-    UT_CHECK(openxt_v4v_get_opcode(&rcv_packet) == 5);
-    UT_CHECK(openxt_v4v_get_length(&snd_packet) == sizeof(TestPacket));
-    UT_CHECK(openxt_v4v_get_length(&rcv_packet) == sizeof(TestPacket));
+    UT_CHECK(openxt_argo_get_opcode(&snd_packet) == 5);
+    UT_CHECK(openxt_argo_get_opcode(&rcv_packet) == 5);
+    UT_CHECK(openxt_argo_get_length(&snd_packet) == sizeof(TestPacket));
+    UT_CHECK(openxt_argo_get_length(&rcv_packet) == sizeof(TestPacket));
 
     // Make sure that we hit the correct errors
-    UT_CHECK((snd_packet_body = openxt_v4v_get_body(NULL)) == NULL);
-    UT_CHECK((rcv_packet_body = openxt_v4v_get_body(NULL)) == NULL);
+    UT_CHECK((snd_packet_body = openxt_argo_get_body(NULL)) == NULL);
+    UT_CHECK((rcv_packet_body = openxt_argo_get_body(NULL)) == NULL);
 
     // Make sure that we get valid pointers
-    UT_CHECK((snd_packet_body = openxt_v4v_get_body(&snd_packet)) != NULL);
-    UT_CHECK((rcv_packet_body = openxt_v4v_get_body(&rcv_packet)) != NULL);
+    UT_CHECK((snd_packet_body = openxt_argo_get_body(&snd_packet)) != NULL);
+    UT_CHECK((rcv_packet_body = openxt_argo_get_body(&rcv_packet)) != NULL);
 
     // Put data into the packets
     if (snd_packet_body && rcv_packet_body)
@@ -132,37 +132,37 @@ void test_v4v(void)
         snd_packet_body->data2 = 2;
 
         // Make sure that we hit the correct errors
-        UT_CHECK(openxt_v4v_send(NULL, &snd_packet) == -EINVAL);
-        UT_CHECK(openxt_v4v_recv(NULL, &rcv_packet) == -EINVAL);
-        UT_CHECK(openxt_v4v_send(client, NULL) == -EINVAL);
-        UT_CHECK(openxt_v4v_recv(server, NULL) == -EINVAL);
+        UT_CHECK(openxt_argo_send(NULL, &snd_packet) == -EINVAL);
+        UT_CHECK(openxt_argo_recv(NULL, &rcv_packet) == -EINVAL);
+        UT_CHECK(openxt_argo_send(client, NULL) == -EINVAL);
+        UT_CHECK(openxt_argo_recv(server, NULL) == -EINVAL);
 
         // Mess up the connection
-        UT_CHECK(openxt_v4v_close_internal(client) == 0);
-        UT_CHECK(openxt_v4v_close_internal(server) == 0);
+        UT_CHECK(openxt_argo_close_internal(client) == 0);
+        UT_CHECK(openxt_argo_close_internal(server) == 0);
 
         // Make sure that we hit the correct errors
-        UT_CHECK(openxt_v4v_send(client, &snd_packet) == -ENODEV);
-        UT_CHECK(openxt_v4v_recv(server, &rcv_packet) == -ENODEV);
+        UT_CHECK(openxt_argo_send(client, &snd_packet) == -ENODEV);
+        UT_CHECK(openxt_argo_recv(server, &rcv_packet) == -ENODEV);
 
         // Mess up the length
-        snd_packet.header.length = V4V_MAX_PACKET_BODY_SIZE * 2;
-        rcv_packet.header.length = V4V_MAX_PACKET_BODY_SIZE * 2;
+        snd_packet.header.length = ARGO_MAX_PACKET_BODY_SIZE * 2;
+        rcv_packet.header.length = ARGO_MAX_PACKET_BODY_SIZE * 2;
 
         // Make sure that we hit the correct errors
-        UT_CHECK(openxt_v4v_send(client, &snd_packet) == -EOVERFLOW);
+        UT_CHECK(openxt_argo_send(client, &snd_packet) == -EOVERFLOW);
 
         // Clean things up
-        UT_CHECK(openxt_v4v_close(client) == 0);
-        UT_CHECK(openxt_v4v_close(server) == 0);
-        UT_CHECK((client = openxt_v4v_open(V4V_PORT_NONE, V4V_DOMID_ANY, 5001, 0)) != NULL);
-        UT_CHECK((server = openxt_v4v_open(5001, V4V_DOMID_ANY, V4V_PORT_NONE, 0)) != NULL);
-        UT_CHECK(openxt_v4v_set_length(&snd_packet, sizeof(TestPacket)) == 0);
-        UT_CHECK(openxt_v4v_set_length(&rcv_packet, sizeof(TestPacket)) == 0);
+        UT_CHECK(openxt_argo_close(client) == 0);
+        UT_CHECK(openxt_argo_close(server) == 0);
+        UT_CHECK((client = openxt_argo_open(XEN_ARGO_PORT_NONE, XEN_ARGO_DOMID_ANY, 5001, 0)) != NULL);
+        UT_CHECK((server = openxt_argo_open(5001, XEN_ARGO_DOMID_ANY, XEN_ARGO_PORT_NONE, 0)) != NULL);
+        UT_CHECK(openxt_argo_set_length(&snd_packet, sizeof(TestPacket)) == 0);
+        UT_CHECK(openxt_argo_set_length(&rcv_packet, sizeof(TestPacket)) == 0);
 
         // Validate that you can send / recv correctly.
-        UT_CHECK(openxt_v4v_send(client, &snd_packet) == sizeof(TestPacket));
-        UT_CHECK(openxt_v4v_recv(server, &rcv_packet) == sizeof(TestPacket));
+        UT_CHECK(openxt_argo_send(client, &snd_packet) == sizeof(TestPacket));
+        UT_CHECK(openxt_argo_recv(server, &rcv_packet) == sizeof(TestPacket));
 
         // Validate the result
         UT_CHECK(rcv_packet_body->data1 == 1);
@@ -654,7 +654,7 @@ int openxt_unittest(int argc, char *argv[])
     if (argc < 3){
         openxt_info("wrong syntax: expecting ALSA_DEVICE=\"hw:<#>\" %s unittest [tests]\n", argv[0]);
         openxt_info("available tests:\n");
-        openxt_info("    - test_v4v\n");
+        openxt_info("    - test_argo\n");
         openxt_info("    - test_alsa\n");
         openxt_info("    - test_capture\n");
         openxt_info("    - test_playback\n");
@@ -671,7 +671,7 @@ int openxt_unittest(int argc, char *argv[])
 
     // Tests
     for (i = 2; i < argc; i++) {
-        if (strcmp(argv[i], "test_v4v") == 0) test_v4v();
+        if (strcmp(argv[i], "test_argo") == 0) test_argo();
         if (strcmp(argv[i], "test_alsa") == 0) test_alsa();
         if (strcmp(argv[i], "test_capture") == 0) test_capture();
         if (strcmp(argv[i], "test_playback") == 0) test_playback();

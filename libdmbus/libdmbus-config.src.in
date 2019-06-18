@@ -70,8 +70,8 @@ if test "$echo_exec_prefix" = "yes"; then
         echo $exec_prefix
 fi
 if test "$echo_cflags" = "yes"; then
-        echo $includes @LIBV4V_INC@
+        echo $includes @LIBARGO_INC@
 fi
 if test "$echo_libs" = "yes"; then
-        echo -L@libdir@ -ldmbus @LIBV4V_LIB@
+        echo -L@libdir@ -ldmbus @LIBARGO_LIB@
 fi

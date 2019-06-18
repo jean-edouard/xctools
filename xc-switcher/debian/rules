@@ -18,7 +18,7 @@ include /usr/share/dpkg/default.mk
 #	automake --force-missing --add-missing
 #	autoconf
 #	./configure
-#	ln -s ../v4v/linux src/linux
+#	ln -s ../argo/linux src/linux
 
 #override_dh_usrlocal:
 #	echo
@@ -27,4 +27,4 @@ include /usr/share/dpkg/default.mk
 #	$(MAKE) prefix=/usr
 
 #override_dh_auto_install:
-#	$(MAKE) DESTDIR=$$(pwd)/debian/libv4v prefix=/usr install
+#	$(MAKE) DESTDIR=$$(pwd)/debian/libargo prefix=/usr install

@@ -6,5 +6,5 @@ includedir=@includedir@
 Name: libdmbus
 Description: Library Surface Manager Plugin
 Version: @VERSION@
-Libs: -L${libdir} -ldmbus @LIBV4V_LIB@
-Cflags: -I${includedir} @LIBV4V_INC@
+Libs: -L${libdir} -ldmbus @LIBARGO_LIB@
+Cflags: -I${includedir} @LIBARGO_INC@

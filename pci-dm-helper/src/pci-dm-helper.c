@@ -17,7 +17,7 @@
  */
 
 #include <xenctrl.h>
-#include <libv4v.h>
+#include <libargo.h>
 #include <pci/pci.h>
 
 #include <unistd.h>
@@ -71,10 +71,10 @@ static
 int nrecv(int fd, void *buf, size_t n)
 {
     while (n) {
-        ssize_t r = v4v_recv( fd, buf, n, 0 );
+        ssize_t r = argo_recv( fd, buf, n, 0 );
         if (r == -1) {
             if (errno == EAGAIN) continue;
-            perror("v4v_recv");
+            perror("argo_recv");
             return r;
         } else if (r == 0) {
             warning("nrecv: EOF\n");
@@ -92,10 +92,10 @@ static
 int nsend(int fd, void *buf, size_t n)
 {
     while (n) {
-        ssize_t r = v4v_send( fd, buf, n, 0 );
+        ssize_t r = argo_send( fd, buf, n, 0 );
         if (r == -1) {
             if (errno == EAGAIN) continue;
-            perror("v4v_send");
+            perror("argo_send");
             return r;
         } else {
             n -= r; buf += r;
@@ -243,35 +243,35 @@ int process(int fd, struct remotepci_req *req)
 static
 int shakehands(int domid, int *ssock)
 {
-    v4v_addr_t addr, raddr;
-    int fd = v4v_socket(SOCK_STREAM);
+    xen_argo_addr_t addr, raddr;
+    int fd = argo_socket(SOCK_STREAM);
 
     *ssock = fd;
     if (fd<0) {
-        perror("v4v_socket");
+        perror("argo_socket");
         return fd;
     }
     memset(&addr, 0, sizeof(addr));
-    addr.port = RPCI_PORT;
-    addr.domain = V4V_DOMID_ANY;
-    if (-1 == v4v_bind(fd, &addr, domid)) {
-        perror("v4v_bind");
+    addr.aport = RPCI_PORT;
+    addr.domain_id = XEN_ARGO_DOMID_ANY;
+    if (-1 == argo_bind(fd, &addr, domid)) {
+        perror("argo_bind");
         return -1;
     }
-    if (-1 == v4v_listen(fd, 1)) {
-        perror("v4v_listen");
+    if (-1 == argo_listen(fd, 1)) {
+        perror("argo_listen");
         return -1;
     }
     info("listening..\n");
     for (;;) {
-        int talkfd = v4v_accept(fd, &raddr);
+        int talkfd = argo_accept(fd, &raddr);
         if (talkfd == -1) {
-            perror("v4v_accept");
+            perror("argo_accept");
             return -1;
         }
-        info("connection from domain %d\n", raddr.domain);
-        if (raddr.domain != domid) {
-            warning ("unexpected remote domain, have %d, expecting %d\n", raddr.domain, domid);
+        info("connection from domain %d\n", raddr.domain_id);
+        if (raddr.domain_id != domid) {
+            warning ("unexpected remote domain, have %d, expecting %d\n", raddr.domain_id, domid);
             close(talkfd);
         } else {
             return talkfd;

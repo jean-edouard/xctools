@@ -9,7 +9,7 @@
 # define __DMBUS_H__
 
 # include <stdint.h>
-# include <libv4v.h>
+# include <libargo.h>
 
 # ifdef __cplusplus
 extern "C"

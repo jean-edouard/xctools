@@ -34,7 +34,7 @@
 #include <scsi/sg.h>
 #include <syslog.h>
 
-#include "atapi_pt_v4v.h"
+#include "atapi_pt_argo.h"
 
 static int pt_log_level = 0;
 
@@ -69,15 +69,18 @@ do {                                                               \
             PT_LOG(fmt, ## __VA_ARGS__);                                  \
     } while (0)
 
-#define V4V_TYPE 'W'
-#define V4VIOCSETRINGSIZE       _IOW (V4V_TYPE,  1, uint32_t)
+#define ARGO_TYPE 'W'
+#define ARGOIOCSETRINGSIZE       _IOW (ARGO_TYPE,  1, uint32_t)
 
 #define ATAPI_CDROM_PORT 5000
 
-#define V4V_ATAPI_PT_RING_SIZE \
-  (V4V_ROUNDUP((((4096)*64) - sizeof(v4v_ring_t)-V4V_ROUNDUP(1))))
+#define XEN_ARGO_MSG_SLOT_SIZE 0x10
+#define XEN_ARGO_ROUNDUP(a) roundup((a), XEN_ARGO_MSG_SLOT_SIZE)
 
-#define MAX_V4V_MSG_SIZE (V4V_ATAPI_PT_RING_SIZE)
+#define ARGO_ATAPI_PT_RING_SIZE \
+  (XEN_ARGO_ROUNDUP((((4096)*64) - sizeof(xen_argo_ring_t)-XEN_ARGO_ROUNDUP(1))))
+
+#define MAX_ARGO_MSG_SIZE (ARGO_ATAPI_PT_RING_SIZE)
 
 #define MAX_ATAPI_PT_DEVICES 6
 typedef struct ATAPIPTDeviceState {
@@ -96,9 +99,9 @@ typedef struct ATAPIPTDeviceState {
 } ATAPIPTDeviceState;
 
 typedef struct ATAPIPTHelperState {
-    int v4v_fd;
-    v4v_addr_t remote_addr;
-    v4v_addr_t local_addr;
+    int argo_fd;
+    xen_argo_addr_t remote_addr;
+    xen_argo_addr_t local_addr;
     int stubdom_id;
     ATAPIPTDeviceState devices[MAX_ATAPI_PT_DEVICES];
 } ATAPIPTHelperState;
@@ -156,9 +159,9 @@ static void exit_cleanup(int exit_code)
         }
     }
 
-    /* close v4v channel to stubdom */
-    v4v_close(g_hs.v4v_fd);
-    g_hs.v4v_fd = -1;
+    /* close argo channel to stubdom */
+    argo_close(g_hs.argo_fd);
+    g_hs.argo_fd = -1;
 
     /* close syslog */
     closelog();
@@ -314,26 +317,26 @@ static ATAPIPTDeviceState *init_device_state(ATAPIPTHelperState *hs,
  */
 static int init_helper_state(ATAPIPTHelperState *hs)
 {
-    uint32_t v4v_ring_size = V4V_ATAPI_PT_RING_SIZE;
+    uint32_t argo_ring_size = ARGO_ATAPI_PT_RING_SIZE;
 
-    hs->v4v_fd = v4v_socket(SOCK_DGRAM);
+    hs->argo_fd = argo_socket(SOCK_DGRAM);
 
-    if (hs->v4v_fd == -1) {
-        PT_LOG("unable to create a v4vsocket");
+    if (hs->argo_fd == -1) {
+        PT_LOG("unable to create a argosocket");
         return -1;
     }
 
-    hs->local_addr.port = ATAPI_CDROM_PORT;
-    hs->local_addr.domain = V4V_DOMID_ANY;
+    hs->local_addr.aport = ATAPI_CDROM_PORT;
+    hs->local_addr.domain_id = XEN_ARGO_DOMID_ANY;
 
-    hs->remote_addr.port = V4V_PORT_NONE;
-    hs->remote_addr.domain = hs->stubdom_id;
+    hs->remote_addr.aport = XEN_ARGO_PORT_NONE;
+    hs->remote_addr.domain_id = hs->stubdom_id;
 
-    ioctl(hs->v4v_fd, V4VIOCSETRINGSIZE, &v4v_ring_size);
-    if (v4v_bind(hs->v4v_fd, &hs->local_addr, hs->stubdom_id) == -1) {
-        PT_LOG("unable to bind the v4vsocket");
-        v4v_close(hs->v4v_fd);
-        hs->v4v_fd = -1;
+    ioctl(hs->argo_fd, ARGOIOCSETRINGSIZE, &argo_ring_size);
+    if (argo_bind(hs->argo_fd, &hs->local_addr, hs->stubdom_id) == -1) {
+        PT_LOG("unable to bind the argosocket");
+        argo_close(hs->argo_fd);
+        hs->argo_fd = -1;
         return -1;
     }
 
@@ -341,17 +344,17 @@ static int init_helper_state(ATAPIPTHelperState *hs)
 }
 
 /**
- * Sends v4v message to stubdom.
+ * Sends argo message to stubdom.
  * @param[in] hs
  * @param[in] buf: message to send
  * @param[in] size: size of buf
  * @returns true if message sent successfully, false otherwise.
  */
-static bool pt_v4v_send_message(ATAPIPTHelperState* hs, void *buf, size_t size)
+static bool pt_argo_send_message(ATAPIPTHelperState* hs, void *buf, size_t size)
 {
     int ret;
 
-    ret = v4v_sendto(hs->v4v_fd, buf, size, 0, &hs->remote_addr);
+    ret = argo_sendto(hs->argo_fd, buf, size, 0, &hs->remote_addr);
 
     if (ret != size) {
         return false;
@@ -385,16 +388,16 @@ static ATAPIPTDeviceState * device_id_to_device_state(ATAPIPTHelperState* hs,
 }
 
 /**
- * Handles ATAPI_PTV4V_OPEN command from qemu stubdom.
+ * Handles ATAPI_PTARGO_OPEN command from qemu stubdom.
  * @param[in] hs: Helper state pointer.
  * @param[in] buf: Data packet received from qemu.
  * @param[in] len: Length of data packet received.
  * @returns 0 on success, -1 on errror.
  */
-static int atapi_ptv4v_open(ATAPIPTHelperState *hs, uint8_t *buf, size_t len)
+static int atapi_ptargo_open(ATAPIPTHelperState *hs, uint8_t *buf, size_t len)
 {
-    pt_v4vcmd_open_request_t *request = (pt_v4vcmd_open_request_t *)buf;
-    pt_v4vcmd_open_response_t response;
+    pt_argocmd_open_request_t *request = (pt_argocmd_open_request_t *)buf;
+    pt_argocmd_open_response_t response;
     ATAPIPTDeviceState *ds;
 
     if (len != sizeof(*request)) {
@@ -408,12 +411,12 @@ static int atapi_ptv4v_open(ATAPIPTHelperState *hs, uint8_t *buf, size_t len)
         return -1;
     }
 
-    response.cmd = ATAPI_PTV4V_OPEN;
+    response.cmd = ATAPI_PTARGO_OPEN;
     response.device_id = ds->device_id;
 
     PT_LOG("opened %s - id = %d\n", ds->device_path, ds->device_id);
 
-    if (!pt_v4v_send_message(hs, &response, sizeof(response))) {
+    if (!pt_argo_send_message(hs, &response, sizeof(response))) {
         PT_LOG("error: failed to send a message to %s", ds->device_path);
         return -1;
     }
@@ -422,20 +425,20 @@ static int atapi_ptv4v_open(ATAPIPTHelperState *hs, uint8_t *buf, size_t len)
 }
 
 /**
- * Handles ATAPI_PTV4V_ACQUIRE_LOCK command from qemu stubdom.
+ * Handles ATAPI_PTARGO_ACQUIRE_LOCK command from qemu stubdom.
  * @param[in] hs: Helper state pointer.
  * @param[in] buf: Data packet received from qemu.
  * @param[in] len: Length of data packet received.
  * @returns 0 on success, -1 on errror.
  */
-static int atapi_ptv4v_acquire_lock(ATAPIPTHelperState* hs, uint8_t *buf,
+static int atapi_ptargo_acquire_lock(ATAPIPTHelperState* hs, uint8_t *buf,
                                     size_t len)
 {
-    pt_v4vcmd_acquire_lock_request_t *request;
-    pt_v4vcmd_acquire_lock_response_t response;
+    pt_argocmd_acquire_lock_request_t *request;
+    pt_argocmd_acquire_lock_response_t response;
     ATAPIPTDeviceState *ds;
 
-    request = (pt_v4vcmd_acquire_lock_request_t *)buf;
+    request = (pt_argocmd_acquire_lock_request_t *)buf;
 
     if (len != sizeof(*request)) {
         PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
@@ -450,13 +453,13 @@ static int atapi_ptv4v_acquire_lock(ATAPIPTHelperState* hs, uint8_t *buf,
 
     acquire_global_lock(ds);
 
-    response.cmd = ATAPI_PTV4V_ACQUIRE_LOCK;
+    response.cmd = ATAPI_PTARGO_ACQUIRE_LOCK;
     response.device_id = ds->device_id;
     response.lock_state = ds->lock_state;
 
     PT_LOG("acquire lock for %s = %d\n", ds->device_path, ds->lock_state);
 
-    if (!pt_v4v_send_message(hs, &response, sizeof(response))) {
+    if (!pt_argo_send_message(hs, &response, sizeof(response))) {
         PT_LOG("error: failed to send a message to %s", ds->device_path);
         return -1;
     }
@@ -465,19 +468,19 @@ static int atapi_ptv4v_acquire_lock(ATAPIPTHelperState* hs, uint8_t *buf,
 }
 
 /**
- * Handles ATAPI_PTV4V_RELEASE_LOCK command from qemu stubdom.
+ * Handles ATAPI_PTARGO_RELEASE_LOCK command from qemu stubdom.
  * @param[in] hs: Helper state pointer.
  * @param[in] buf: Data packet received from qemu.
  * @param[in] len: Length of data packet received.
  * @returns 0 on success, -1 on errror.
  */
-static int atapi_ptv4v_release_lock(ATAPIPTHelperState* hs, uint8_t *buf,
+static int atapi_ptargo_release_lock(ATAPIPTHelperState* hs, uint8_t *buf,
                                     size_t len)
 {
-    pt_v4vcmd_release_lock_request_t *request;
+    pt_argocmd_release_lock_request_t *request;
     ATAPIPTDeviceState *ds;
 
-    request = (pt_v4vcmd_release_lock_request_t *)buf;
+    request = (pt_argocmd_release_lock_request_t *)buf;
 
     if (len != sizeof(*request)) {
         PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
@@ -497,20 +500,20 @@ static int atapi_ptv4v_release_lock(ATAPIPTHelperState* hs, uint8_t *buf,
 }
 
 /**
- * Handles ATAPI_PTV4V_SG_GET_RESERVED_SIZE command from qemu stubdom.
+ * Handles ATAPI_PTARGO_SG_GET_RESERVED_SIZE command from qemu stubdom.
  * @param[in] hs: Helper state pointer.
  * @param[in] buf: Data packet received from qemu.
  * @param[in] len: Length of data packet received.
  * @returns 0 on success, -1 on errror.
  */
-static int atapi_ptv4v_sg_get_reserved_size(ATAPIPTHelperState* hs,
+static int atapi_ptargo_sg_get_reserved_size(ATAPIPTHelperState* hs,
                                             uint8_t *buf, size_t len)
 {
-    pt_v4vcmd_sg_get_reserved_size_request_t *request;
-    pt_v4vcmd_sg_get_reserved_size_response_t response;
+    pt_argocmd_sg_get_reserved_size_request_t *request;
+    pt_argocmd_sg_get_reserved_size_response_t response;
     ATAPIPTDeviceState *ds;
 
-    request = (pt_v4vcmd_sg_get_reserved_size_request_t *)buf;
+    request = (pt_argocmd_sg_get_reserved_size_request_t *)buf;
 
     if (len != sizeof(*request)) {
         PT_LOG("error: mismatch buffer size %lu vs %lu", len, sizeof(*request));
@@ -523,7 +526,7 @@ static int atapi_ptv4v_sg_get_reserved_size(ATAPIPTHelperState* hs,
         return -1;
     }
 
-    response.cmd = ATAPI_PTV4V_SG_GET_RESERVED_SIZE;
+    response.cmd = ATAPI_PTARGO_SG_GET_RESERVED_SIZE;
     response.device_id = ds->device_id;
 
     if (ioctl(ds->device_fd, SG_GET_RESERVED_SIZE, &response.size) < 0) {
@@ -535,7 +538,7 @@ static int atapi_ptv4v_sg_get_reserved_size(ATAPIPTHelperState* hs,
     PT_LOG("sg get reserved size for %s = %d\n", ds->device_path,
             (int)response.size);
 
-    if (!pt_v4v_send_message(hs, &response, sizeof(response))) {
+    if (!pt_argo_send_message(hs, &response, sizeof(response))) {
         PT_LOG("error: failed to send a message to %s", ds->device_path);
         return -1;
     }
@@ -544,24 +547,27 @@ static int atapi_ptv4v_sg_get_reserved_size(ATAPIPTHelperState* hs,
 }
 
 /**
- * Handles ATAPI_PTV4V_SG_IO command from qemu stubdom.
+ * Handles ATAPI_PTARGO_SG_IO command from qemu stubdom.
  * @param[in] hs: Helper state pointer.
  * @param[in] buf: Data packet received from qemu.
  * @param[in] len: Length of data packet received.
  * @returns 0 on success, -1 on errror.
  */
-static int atapi_ptv4v_sg_io(ATAPIPTHelperState* hs, uint8_t *buf, size_t len)
+static int atapi_ptargo_sg_io(ATAPIPTHelperState* hs, uint8_t *buf, size_t len)
 {
-    pt_v4vcmd_sg_io_request_t *request = (pt_v4vcmd_sg_io_request_t *)buf;
+    pt_argocmd_sg_io_request_t *request = (pt_argocmd_sg_io_request_t *)buf;
 
-    /* TODO: MAX_V4V_MSG_SIZE :( - din/dout data needs be contrained properly */
-    uint8_t buf_out[MAX_V4V_MSG_SIZE] = {0, };
-    pt_v4vcmd_sg_io_response_t *response;
+    /* TODO: MAX_ARGO_MSG_SIZE :( - din/dout data needs be contrained properly */
+    uint8_t buf_out[MAX_ARGO_MSG_SIZE];
+    pt_argocmd_sg_io_response_t *response;
 
     ATAPIPTDeviceState *ds;
     struct sg_io_v4 cmd;
 
-    response = (pt_v4vcmd_sg_io_response_t *)buf_out;
+    /* clear out the buffer */
+    memset(buf_out, 0, sizeof(uint8_t)*MAX_ARGO_MSG_SIZE);
+
+    response = (pt_argocmd_sg_io_response_t *)buf_out;
 
     /* len must at least be size of request */
     if (len < sizeof(*request)) {
@@ -624,7 +630,7 @@ static int atapi_ptv4v_sg_io(ATAPIPTHelperState* hs, uint8_t *buf, size_t len)
     cmd.din_xferp = 0;
 
     /* populate outgoing packet */
-    response->cmd = ATAPI_PTV4V_SG_IO;
+    response->cmd = ATAPI_PTARGO_SG_IO;
     response->device_id = ds->device_id;
     memcpy(&response->sgio, &cmd, sizeof(response->sgio));
     response->din_data_len = cmd.din_xfer_len;
@@ -632,7 +638,7 @@ static int atapi_ptv4v_sg_io(ATAPIPTHelperState* hs, uint8_t *buf, size_t len)
     /* response.din_data is populated by SG_IO */
 
     len = sizeof(*response) + cmd.din_xfer_len;
-    if (!pt_v4v_send_message(hs, response, len)) {
+    if (!pt_argo_send_message(hs, response, len)) {
        PT_LOG("error: failed to send a message to %s", ds->device_path);
        return -1;
     }
@@ -675,39 +681,42 @@ int main(int const argc, char const* const* argv)
 
     while (!pending_exit) {
         int ret;
-        uint8_t io_buf[MAX_V4V_MSG_SIZE] = {0,};
+        uint8_t io_buf[MAX_ARGO_MSG_SIZE];
+
+        /* clear out the buffer */
+        memset(io_buf, 0, sizeof(uint8_t)*MAX_ARGO_MSG_SIZE);
 
         PT_DEBUG("wait for command from stubdom (%d)", g_hs.stubdom_id);
 
         /* updates global remote_addr on per-packet basis */
-        ret = v4v_recvfrom(g_hs.v4v_fd, io_buf, sizeof(io_buf),
+        ret = argo_recvfrom(g_hs.argo_fd, io_buf, sizeof(io_buf),
                            0, &g_hs.remote_addr);
 
         if (ret < 0) {
-            PT_LOG("v4v_recvfrom failed!\n");
+            PT_LOG("argo_recvfrom failed!\n");
             break;
         }
 
         switch (io_buf[0]) {
-            case ATAPI_PTV4V_OPEN:
-                PT_LOG("ATAPI_PTV4V_OPEN\n");
-                ret = atapi_ptv4v_open(&g_hs, io_buf, ret);
+            case ATAPI_PTARGO_OPEN:
+                PT_LOG("ATAPI_PTARGO_OPEN\n");
+                ret = atapi_ptargo_open(&g_hs, io_buf, ret);
                 break;
-            case ATAPI_PTV4V_SG_IO:
-                PT_DEBUG("ATAPI_PTV4V_SG_IO\n");
-                ret = atapi_ptv4v_sg_io(&g_hs, io_buf, ret);
+            case ATAPI_PTARGO_SG_IO:
+                PT_DEBUG("ATAPI_PTARGO_SG_IO\n");
+                ret = atapi_ptargo_sg_io(&g_hs, io_buf, ret);
                 break;
-            case ATAPI_PTV4V_SG_GET_RESERVED_SIZE:
-                PT_LOG("ATAPI_PTV4V_SG_GET_RESERVED_SIZE\n");
-                ret = atapi_ptv4v_sg_get_reserved_size(&g_hs, io_buf, ret);
+            case ATAPI_PTARGO_SG_GET_RESERVED_SIZE:
+                PT_LOG("ATAPI_PTARGO_SG_GET_RESERVED_SIZE\n");
+                ret = atapi_ptargo_sg_get_reserved_size(&g_hs, io_buf, ret);
                 break;
-            case ATAPI_PTV4V_ACQUIRE_LOCK:
-                PT_LOG("ATAPI_PTV4V_ACQUIRE_LOCK\n");
-                ret = atapi_ptv4v_acquire_lock(&g_hs, io_buf, ret);
+            case ATAPI_PTARGO_ACQUIRE_LOCK:
+                PT_LOG("ATAPI_PTARGO_ACQUIRE_LOCK\n");
+                ret = atapi_ptargo_acquire_lock(&g_hs, io_buf, ret);
                 break;
-            case ATAPI_PTV4V_RELEASE_LOCK:
-                PT_LOG("ATAPI_PTV4V_RELEASE_LOCK\n");
-                ret = atapi_ptv4v_release_lock(&g_hs, io_buf, ret);
+            case ATAPI_PTARGO_RELEASE_LOCK:
+                PT_LOG("ATAPI_PTARGO_RELEASE_LOCK\n");
+                ret = atapi_ptargo_release_lock(&g_hs, io_buf, ret);
                 break;
             default:
                 PT_LOG("bad command = %d", io_buf[0]);

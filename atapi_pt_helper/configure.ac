@@ -15,7 +15,7 @@ AC_CHECK_HEADERS([stdio.h fcntl.h errno.h signal.h])
 AC_CHECK_HEADERS([sys/ioctl.h sys/types.h sys/stat.h])
 AC_CHECK_HEADERS([scsi/sg.h])
 AC_CHECK_HEADERS([linux/bsg.h])
-AC_CHECK_HEADERS([xenstore.h libv4v.h])
+AC_CHECK_HEADERS([xenstore.h libargo.h])
 AC_HEADER_ASSERT
 
 AC_C_INLINE
@@ -25,9 +25,9 @@ AC_SYS_LARGEFILE
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([src/config.h])
 
-PKG_CHECK_MODULES(LIBV4V, libv4v, [], [AC_MSG_ERROR("libv4v required.")])
-AC_SUBST(LIBV4V_CFLAGS)
-AC_SUBST(LIBV4V_LIBS)
+PKG_CHECK_MODULES(LIBARGO, libargo, [], [AC_MSG_ERROR("libargo required.")])
+AC_SUBST(LIBARGO_CFLAGS)
+AC_SUBST(LIBARGO_LIBS)
 
 AC_OUTPUT([Makefile
 	   src/Makefile])
