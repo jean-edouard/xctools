@@ -47,8 +47,8 @@
  */
 #define QMPH_LOG(fmt, ...)                                           \
 do {                                                                 \
-        syslog(LOG_NOTICE, "qmp-helper [%s:%s:%d] (stubdom-%d) " fmt,\
-               __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,     \
+        syslog(LOG_NOTICE, "[%s:%d] (stubdom-%d) " fmt,              \
+               __FUNCTION__, __LINE__, qhs.stubdom_id,               \
                  ##__VA_ARGS__);                                     \
     } while (0)
 
