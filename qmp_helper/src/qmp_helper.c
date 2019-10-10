@@ -155,7 +155,10 @@ static int qmph_argo_to_unix(struct qmp_helper_state *pqhs)
     if (ret < 0) {
         QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
                  strerror(errno), ret);
-        return ret;
+        QMPH_LOG("closing unix_fd - maybe client disappeared");
+        close(pqhs->unix_fd);
+        pqhs->unix_fd = -1;
+        return 0;
     }
 
     return 0;
