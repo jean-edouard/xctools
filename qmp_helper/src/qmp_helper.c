@@ -338,6 +338,8 @@ int main(int argc, char *argv[])
             nfds = qhs.listen_fd > nfds ? qhs.listen_fd : nfds;
         }
         nfds += 1;
+        QMPH_LOG("pre-select argo:%d unix:%d listen:%d\n",
+                 qhs.argo_fd, qhs.unix_fd, qhs.listen_fd);
 
         if (select(nfds, &rfds, NULL, NULL, NULL) == -1) {
             ret = errno;
