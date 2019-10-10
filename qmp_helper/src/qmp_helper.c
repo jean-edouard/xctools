@@ -146,6 +146,11 @@ static int qmph_argo_to_unix(struct qmp_helper_state *pqhs)
         return rcv;
     }
 
+    if (pqhs->unix_fd == -1) {
+        QMPH_LOG("Dropping %d argo bytes.\n", rcv);
+        return 0;
+    }
+
     ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
     if (ret < 0) {
         QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
