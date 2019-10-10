@@ -204,7 +204,7 @@ static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
     socklen_t len = sizeof(un);
     int lfd, cfd;
 
-    QMPH_LOG("Waiting for connection on unix socket");
+    QMPH_LOG("Accepting connection on unix socket");
 
     lfd = pqhs->listen_fd;
 
@@ -228,7 +228,6 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 {
     struct sockaddr_un un;
     int lfd;
-    int ret;
 
     /* By default the helper creates a Unix socket as if QEMU were called with:
      * -qmp unix:/var/run/xen/qmp-libxl-<domid>,server,nowait
@@ -261,12 +260,6 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
     }
 
     pqhs->listen_fd = lfd;
-
-    ret = qmph_accept_unix_socket(pqhs);
-    if (ret) {
-        QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
-        qmph_exit_cleanup(ret);
-    }
 
     return 0;
 
@@ -321,9 +314,6 @@ int main(int argc, char *argv[])
 
     QMPH_LOG("argo ready, wait for a connection...");
 
-    /* Ready to listen and accept one connection. Note this will block on
-     * accept until connected.
-     */
     ret = qmph_init_unix_socket(&qhs);
     if (ret) {
         QMPH_LOG("ERROR failed to init unix socket - ret: %d\n", ret);
