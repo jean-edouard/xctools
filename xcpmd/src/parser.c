@@ -503,8 +503,7 @@ struct fn * new_fn(struct fn * last, //Last fn struct in the desired fn list to 
     }
 
     f = malloc(sizeof(struct fn));
-    f->name = malloc(strlen(name)+1);
-    strncpy(f->name, name, strlen(name)+1);
+    f->name = strdup(name);
     f->args = args;
     f->undo = undo;
     f->next = NULL;
@@ -1144,8 +1143,7 @@ void action_acceptArg(struct parse_data * data, char c) {
         sscanf(data->accum_arg, "%f", &(val.as_float));
         break;
     case TYPE_STR:
-        val.as_str = malloc(strlen(data->accum_arg)+1);
-        strncpy(val.as_str, data->accum_arg, strlen(data->accum_arg)+1);
+        val.as_str = strdup(data->accum_arg);
         break;
     case TYPE_BOOL:
         if (data->accum_arg[0] == 't') {
@@ -1171,8 +1169,7 @@ void action_acceptArg(struct parse_data * data, char c) {
             return;
         }
         str = data->accum_arg;
-        val.as_str = malloc(strlen(str) + 1);
-        strncpy(val.as_str, str, strlen(str) + 1);
+        val.as_str = strdup(str);
         data->arg_type = TYPE_VAR;
         break;
     case TYPE_UNDETERMINED:

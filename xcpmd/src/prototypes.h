@@ -62,6 +62,7 @@ char * strsplit(char * str, char delim);
 char * clone_string(char * str);
 char * safe_sprintf(char * format, ...);
 void safe_str_append(char ** str1, char * format, ...);
+void pstrcpy(char *dst, int size, const char *src);
 void write_ulong_lsb_first(char *temp_val, unsigned long val);
 int file_set_blocking(int fd);
 int file_set_nonblocking(int fd);
