@@ -569,8 +569,12 @@ void test_capture(void)
         if (nread <= 0)
             continue;
 
-        // Write the data.
-        write(1, buffer, nread * sizeof(int32_t));
+        // Write the data ignoring errors.
+        ret = write(1, buffer, nread * sizeof(int32_t));
+        if (ret == -1) {
+            perror("write");
+            return;
+        }
     }
 }
 
