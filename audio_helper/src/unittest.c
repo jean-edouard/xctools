@@ -269,7 +269,7 @@ void test_alsa(void)
     playback_settings->nchannels = 2;
     playback_settings->sample_size = sizeof(uint32_t);
     playback_settings->selement_index = 0;
-    snprintf(playback_settings->pcm_name, sizeof(playback_settings->pcm_name), getenv("ALSA_DEVICE"));
+    snprintf(playback_settings->pcm_name, sizeof(playback_settings->pcm_name), "%s", getenv("ALSA_DEVICE"));
     snprintf(playback_settings->selement_name, sizeof(playback_settings->selement_name), "Master");
 
     // Setup the capture_settings variable.
@@ -280,7 +280,7 @@ void test_alsa(void)
     capture_settings->nchannels = 2;
     capture_settings->sample_size = sizeof(uint32_t);
     capture_settings->selement_index = 0;
-    snprintf(capture_settings->pcm_name, sizeof(capture_settings->pcm_name), getenv("ALSA_DEVICE"));
+    snprintf(capture_settings->pcm_name, sizeof(capture_settings->pcm_name), "%s", getenv("ALSA_DEVICE"));
     snprintf(capture_settings->selement_name, sizeof(capture_settings->selement_name), "Capture");
 
     // Validate improper use of the init function
@@ -537,7 +537,7 @@ void test_capture(void)
     capture_settings->nchannels = 2;
     capture_settings->sample_size = sizeof(uint32_t);
     capture_settings->selement_index = 0;
-    snprintf(capture_settings->pcm_name, sizeof(capture_settings->pcm_name), getenv("ALSA_DEVICE"));
+    snprintf(capture_settings->pcm_name, sizeof(capture_settings->pcm_name), "%s", getenv("ALSA_DEVICE"));
     snprintf(capture_settings->selement_name, sizeof(capture_settings->selement_name), "Capture");
 
     // Initialize the Capture device.
@@ -599,7 +599,7 @@ void test_playback(void)
     playback_settings->nchannels = 2;
     playback_settings->sample_size = sizeof(uint32_t);
     playback_settings->selement_index = 0;
-    snprintf(playback_settings->pcm_name, sizeof(playback_settings->pcm_name), getenv("ALSA_DEVICE"));
+    snprintf(playback_settings->pcm_name, sizeof(playback_settings->pcm_name), "%s", getenv("ALSA_DEVICE"));
     snprintf(playback_settings->selement_name, sizeof(playback_settings->selement_name), "Master");
 
     // Initialize the Capture device.
