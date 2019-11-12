@@ -21,6 +21,7 @@
 //
 
 #include "unittest.h"
+#include "openxtalsa.h"
 #include "openxtdebug.h"
 #include "openxtvmaudio.h"
 #include "openxtmixerctl.h"
