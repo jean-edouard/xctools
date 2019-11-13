@@ -350,7 +350,7 @@ unsigned int xenstore_read_uint(char *path)
     char *buf;
     int ret;
 
-    buf = xenstore_read(path);
+    buf = xenstore_read("%s", path);
     if ( buf == NULL)
         return 0;
 
