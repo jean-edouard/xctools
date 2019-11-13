@@ -159,7 +159,7 @@ static long get_total_charge_rate(void) {
     for (i = 0; i < num_battery_structs_allocd; ++i) {
         if (last_status[i].present == YES) {
 
-            rate = labs(last_status[i].present_rate);
+            rate = last_status[i].present_rate;
             state = get_battery_charge_state(i);
 
             if (state == BATT_CHARGING) {
@@ -460,22 +460,22 @@ static void set_battery_info_attribute(char *attrib_name, char *attrib_value, st
         info->design_voltage = strtoull(attrib_value, NULL, 10) / 1000;
     }
     else if (!strcmp(attrib_name, "model_name")) {
-        strncpy(info->model_number, attrib_value, 32);
+        pstrcpy(info->model_number, sizeof (info->model_number), attrib_value);
     }
     else if (!strcmp(attrib_name, "serial_number")) {
-        strncpy(info->serial_number, attrib_value, 32);
+        pstrcpy(info->serial_number, sizeof (info->serial_number), attrib_value);
     }
     else if (!strcmp(attrib_name, "technology")) {
         if (strstr(attrib_value, "Li-ion"))
-            strncpy(info->battery_type, "LION\n\0", 6);
+            pstrcpy(info->battery_type, sizeof (info->battery_type), "LION\n");
         else if (strstr(attrib_value, "Li-poly"))
-            strncpy(info->battery_type, "LiP\n\0", 6);
+            pstrcpy(info->battery_type, sizeof (info->battery_type), "LiP\n");
         else
-            strncpy(info->battery_type, attrib_value, 32);
+            pstrcpy(info->battery_type, sizeof (info->battery_type), attrib_value);
         info->battery_technology = RECHARGEABLE;
     }
     else if (!strcmp(attrib_name, "manufacturer")) {
-      strncpy(info->oem_info, attrib_value, 32);
+      pstrcpy(info->oem_info, sizeof (info->oem_info), attrib_value);
     }
 }
 

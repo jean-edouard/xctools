@@ -206,6 +206,23 @@ void safe_str_append(char ** str1, char * format, ...) {
     }
 }
 
+/* Copy at most @size bytes from @src in @dst, including the trailing NUL. If
+ * @src is larger than @size, @size-1 bytes are copied and NUL is appended as
+ * the last byte of @dst.
+ * Nothing is copied if @dst or @src is NULL, or if @size is 0 or less.
+ */
+void pstrcpy(char *dst, int size, const char *src)
+{
+    int i;
+
+    if (!dst || !src || size <= 0)
+        return;
+
+    for (i = 0; (i < size - 1) && src[i]; ++i)
+        dst[i] = src[i];
+    dst[i] = '\0';
+}
+
 
 void write_ulong_lsb_first(char *temp_val, unsigned long val)
 {
