@@ -47,8 +47,8 @@
  */
 #define QMPH_LOG(fmt, ...)                                           \
 do {                                                                 \
-        syslog(LOG_NOTICE, "qmp-helper [%s:%s:%d] (stubdom-%d) " fmt,\
-               __FILE__, __FUNCTION__, __LINE__, qhs.stubdom_id,     \
+        syslog(LOG_NOTICE, "[%s:%d] (stubdom-%d) " fmt,              \
+               __FUNCTION__, __LINE__, qhs.stubdom_id,               \
                  ##__VA_ARGS__);                                     \
     } while (0)
 
@@ -120,7 +120,7 @@ static int qmph_unix_to_argo(struct qmp_helper_state *pqhs)
                          4, 0, &pqhs->remote_addr);
         close(pqhs->unix_fd);
         pqhs->unix_fd = -1;
-        return ENOTCONN;
+        return 0;
     }
 
     ret = argo_sendto(pqhs->argo_fd, pqhs->msg_buf,
@@ -146,11 +146,19 @@ static int qmph_argo_to_unix(struct qmp_helper_state *pqhs)
         return rcv;
     }
 
+    if (pqhs->unix_fd == -1) {
+        QMPH_LOG("Dropping %d argo bytes.\n", rcv);
+        return 0;
+    }
+
     ret = write(pqhs->unix_fd, pqhs->msg_buf, rcv);
     if (ret < 0) {
         QMPH_LOG("ERROR write(unix_fd) failed (%s) - %d.\n",
                  strerror(errno), ret);
-        return ret;
+        QMPH_LOG("closing unix_fd - maybe client disappeared");
+        close(pqhs->unix_fd);
+        pqhs->unix_fd = -1;
+        return 0;
     }
 
     return 0;
@@ -196,7 +204,7 @@ static int qmph_accept_unix_socket(struct qmp_helper_state *pqhs)
     socklen_t len = sizeof(un);
     int lfd, cfd;
 
-    QMPH_LOG("Waiting for connection on unix socket");
+    QMPH_LOG("Accepting connection on unix socket");
 
     lfd = pqhs->listen_fd;
 
@@ -220,7 +228,6 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
 {
     struct sockaddr_un un;
     int lfd;
-    int ret;
 
     /* By default the helper creates a Unix socket as if QEMU were called with:
      * -qmp unix:/var/run/xen/qmp-libxl-<domid>,server,nowait
@@ -253,12 +260,6 @@ static int qmph_init_unix_socket(struct qmp_helper_state *pqhs)
     }
 
     pqhs->listen_fd = lfd;
-
-    ret = qmph_accept_unix_socket(pqhs);
-    if (ret) {
-        QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
-        qmph_exit_cleanup(ret);
-    }
 
     return 0;
 
@@ -313,9 +314,6 @@ int main(int argc, char *argv[])
 
     QMPH_LOG("argo ready, wait for a connection...");
 
-    /* Ready to listen and accept one connection. Note this will block on
-     * accept until connected.
-     */
     ret = qmph_init_unix_socket(&qhs);
     if (ret) {
         QMPH_LOG("ERROR failed to init unix socket - ret: %d\n", ret);
@@ -324,10 +322,22 @@ int main(int argc, char *argv[])
 
     while (!pending_exit) {
 
+        nfds = -1;
         FD_ZERO(&rfds);
-        FD_SET(qhs.argo_fd, &rfds);
-        FD_SET(qhs.unix_fd, &rfds);
-        nfds = ((qhs.argo_fd > qhs.unix_fd) ? qhs.argo_fd : qhs.unix_fd) + 1;
+        if (qhs.argo_fd >= 0) {
+            FD_SET(qhs.argo_fd, &rfds);
+            nfds = qhs.argo_fd > nfds ? qhs.argo_fd : nfds;
+        }
+        if (qhs.unix_fd >= 0) {
+            FD_SET(qhs.unix_fd, &rfds);
+            nfds = qhs.unix_fd > nfds ? qhs.unix_fd : nfds;
+        }
+        /* Accept new connections when unix_fd is closed (not connected). */
+        if (qhs.unix_fd == -1 && qhs.listen_fd >= 0) {
+            FD_SET(qhs.listen_fd, &rfds);
+            nfds = qhs.listen_fd > nfds ? qhs.listen_fd : nfds;
+        }
+        nfds += 1;
 
         if (select(nfds, &rfds, NULL, NULL, NULL) == -1) {
             ret = errno;
@@ -335,19 +345,19 @@ int main(int argc, char *argv[])
             qmph_exit_cleanup(ret);
         }
 
-        if (FD_ISSET(qhs.unix_fd, &rfds)) {
-            ret = qmph_unix_to_argo(&qhs);
-            if (ret == ENOTCONN) {
-	        ret = qmph_accept_unix_socket(&qhs);
-                if (ret) {
-                    QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
-                    qmph_exit_cleanup(ret);
-                }
-                QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
-                ret = argo_sendto(qhs.argo_fd, ARGO_MAGIC_CONNECT,
-                                 4, 0, &qhs.remote_addr);
+        if (FD_ISSET(qhs.listen_fd, &rfds)) {
+            ret = qmph_accept_unix_socket(&qhs);
+            if (ret) {
+                QMPH_LOG("ERROR failed to accept unix socket - ret: %d\n", ret);
+                qmph_exit_cleanup(ret);
             }
-            else if (ret != 0)
+            QMPH_LOG("Accepted the connection fd: %d, telling qemu.", qhs.unix_fd);
+            ret = argo_sendto(qhs.argo_fd, ARGO_MAGIC_CONNECT,
+                              4, 0, &qhs.remote_addr);
+        }
+
+        if (FD_ISSET(qhs.unix_fd, &rfds)) {
+            if (qmph_unix_to_argo(&qhs))
                 break; /* abject misery */
         }
 
