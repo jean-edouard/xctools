@@ -1912,8 +1912,11 @@ int parse_config_from_file(char * filename) {
         //Discard any lines longer than 1024 characters.
         if (strchr(line, '\n') == NULL) {
             xcpmd_log(LOG_WARNING, "Line %d longer than 1024 characters. Skipping...\n", line_no);
-            while (strchr(line, '\n') == NULL)
-                fgets(line, 1024, file);
+            while (strchr(line, '\n') == NULL) {
+                if (fgets(line, 1024, file) == NULL) {
+                    break;
+                }
+            }
             continue;
         }
 

@@ -108,7 +108,9 @@ void run_script(struct arg_node * args) {
     //Automatically background the new process so we don't block on it.
     command = safe_sprintf("%s &", node->arg.str);
 
-    system(command);
+    if (system(command) == -1) {
+        xcpmd_log(LOG_ERR, "%s failure running '%s'", __func__, command);
+    }
 
     free(command);
 }

@@ -362,7 +362,7 @@ static void make_xenstore_battery_dir(unsigned int battery_index) {
         }
     }
     if (!flag)
-        xenstore_mkdir(xenstore_path);
+        xenstore_mkdir("%s", xenstore_path);
 
     //xenstore_ls() calls malloc(), so be sure to free().
     free(dir_entries);
@@ -529,7 +529,10 @@ int update_battery_status(unsigned int battery_index) {
                 continue;
 
             memset(data, 0, sizeof(data));
-            fgets(data, sizeof(data), file);
+            if (fgets(data, sizeof(data), file) == NULL) {
+                xcpmd_log(LOG_ERR, "Failed to read %s", filename);
+                continue;
+            }
 
             fclose(file);
 
@@ -608,7 +611,10 @@ int update_battery_info(unsigned int battery_index) {
                 continue;
 
             memset(data, 0, sizeof(data));
-            fgets(data, sizeof(data), file);
+            if (fgets(data, sizeof(data), file) == NULL) {
+                xcpmd_log(LOG_ERR, "Failed to read %s", filename);
+                continue;
+            }
 
             fclose(file);
 
@@ -664,7 +670,7 @@ void write_battery_info_to_xenstore(unsigned int battery_index) {
     }
 
     struct battery_info * info;
-    char bif[1024], string_info[256], xenstore_path[128];
+    char bif[1024], string_info[256];
 
     info = &last_info[battery_index];
 
@@ -698,8 +704,7 @@ void write_battery_info_to_xenstore(unsigned int battery_index) {
     make_xenstore_battery_dir(battery_index);
 
     //Now write the leaves.
-    snprintf(xenstore_path, 255, "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BIF_LEAF);
-    xenstore_write(bif, xenstore_path);
+    xenstore_write(bif, "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BIF_LEAF);
 
 
     //Here for compatibility--will be removed eventually
@@ -714,7 +719,7 @@ void write_battery_info_to_xenstore(unsigned int battery_index) {
 void write_battery_status_to_xenstore(unsigned int battery_index) {
 
     struct battery_status * status;
-    char bst[35], xenstore_path[128];
+    char bst[35];
     int num_batteries, current_battery_level;
 
     if (battery_index >= num_battery_structs_allocd) {
@@ -735,11 +740,9 @@ void write_battery_status_to_xenstore(unsigned int battery_index) {
     //Delete the BST and reset the "present" flag if the battery is not currently present.
     if (status->present != YES) {
 
-        snprintf(xenstore_path, 255, "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BST_LEAF);
-        xenstore_rm(xenstore_path);
+        xenstore_rm("%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BST_LEAF);
 
-        snprintf(xenstore_path, 255, "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BATTERY_PRESENT_LEAF);
-        xenstore_write("0", xenstore_path);
+        xenstore_write("0", "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BATTERY_PRESENT_LEAF);
         return;
     }
 
@@ -755,11 +758,9 @@ void write_battery_status_to_xenstore(unsigned int battery_index) {
     make_xenstore_battery_dir(battery_index);
 
     //Now write the leaves.
-    snprintf(xenstore_path, 255, XS_BATTERY_PATH "%i/" XS_BST_LEAF, battery_index);
-    xenstore_write(bst, xenstore_path);
+    xenstore_write(bst, XS_BATTERY_PATH "%i/" XS_BST_LEAF, battery_index);
 
-    snprintf(xenstore_path, 255, "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BATTERY_PRESENT_LEAF);
-    xenstore_write("1", xenstore_path);
+    xenstore_write("1", "%s%i/%s", XS_BATTERY_PATH, battery_index, XS_BATTERY_PRESENT_LEAF);
 
     //Here for compatibility--will be removed eventually
     if (battery_index == 0)
@@ -787,7 +788,6 @@ void update_batteries(void) {
 
     struct battery_status *old_status = NULL;
     struct battery_info *old_info = NULL;
-    char path[256];
     unsigned int old_num_batteries = 0;
     unsigned int num_batteries = 0;
     unsigned int i, new_array_size, old_array_size, num_batteries_to_update;
@@ -853,13 +853,11 @@ void update_batteries(void) {
 
         if (i < old_array_size && i < new_array_size) {
             if (memcmp(&old_info[i], &last_info[i], sizeof(struct battery_info))) {
-                snprintf(path, 255, "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_INFO_EVENT_LEAF);
-                xenstore_write("1", path);
+                xenstore_write("1", "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_INFO_EVENT_LEAF);
             }
 
             if (memcmp(&old_status[i], &last_status[i], sizeof(struct battery_status))) {
-                snprintf(path, 255, "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_STATUS_EVENT_LEAF);
-                xenstore_write("1", path);
+                xenstore_write("1", "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_STATUS_EVENT_LEAF);
             }
 
             if (old_status[i].present == YES)
@@ -874,10 +872,8 @@ void update_batteries(void) {
         }
         else if (new_array_size > old_array_size) {
             //a battery has been added
-            snprintf(path, 255, "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_INFO_EVENT_LEAF);
-            xenstore_write("1", path);
-            snprintf(path, 255, "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_STATUS_EVENT_LEAF);
-            xenstore_write("1", path);
+            xenstore_write("1", "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_INFO_EVENT_LEAF);
+            xenstore_write("1", "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_STATUS_EVENT_LEAF);
 
             if (last_status[i].present == YES)
                 ++num_batteries;
@@ -893,10 +889,8 @@ void update_batteries(void) {
         }
         else if (new_array_size < old_array_size) {
             //a battery has been removed
-            snprintf(path, 255, "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_INFO_EVENT_LEAF);
-            xenstore_write("1", path);
-            snprintf(path, 255, "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_STATUS_EVENT_LEAF);
-            xenstore_write("1", path);
+            xenstore_write("1", "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_INFO_EVENT_LEAF);
+            xenstore_write("1", "%s%i/%s", XS_BATTERY_EVENT_PATH, i, XS_BATTERY_STATUS_EVENT_LEAF);
 
             if (old_status[i].present == YES)
                 ++old_num_batteries;
@@ -1012,7 +1006,11 @@ int get_num_batteries_present(void) {
             if (file == NULL)
                 continue;
 
-            fgets(data, sizeof(data), file);
+            if (fgets(data, sizeof(data), file) == NULL) {
+                xcpmd_log(LOG_ERR, "Failed to read %s", filename);
+                continue;
+            }
+
             fclose(file);
 
             if (strstr(data, "1")) {
@@ -1030,10 +1028,7 @@ int get_num_batteries_present(void) {
 //Remove a battery's entries from the xenstore.
 static void cleanup_removed_battery(unsigned int battery_index) {
 
-    char path[256];
-
-    snprintf(path, 255, "%s%d", XS_BATTERY_PATH, battery_index);
-    xenstore_rm(path);
+    xenstore_rm("%s%d", XS_BATTERY_PATH, battery_index);
 
     if (battery_index > 0) {
         xenstore_rm(XS_BST1);

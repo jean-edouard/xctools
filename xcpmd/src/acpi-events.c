@@ -63,7 +63,10 @@ int get_ac_adapter_status(void) {
     else if (file == NULL)
         return AC_UNKNOWN;
 
-    fgets(data, sizeof(data), file);
+    if (fgets(data, sizeof(data), file) == NULL) {
+        xcpmd_log(LOG_ERR, "Failed to read " AC_ADAPTER_STATE_FILE_PATH);
+    }
+
     fclose(file);
 
     if (strstr(data, "0"))
@@ -76,13 +79,16 @@ int get_ac_adapter_status(void) {
 int get_lid_status(void) {
 
     char data[128];
+    const char *state_file;
     FILE * file;
 
     //Try both lid state paths.
-    file = fopen(LID_STATE_FILE_PATH, "r");
+    state_file = LID_STATE_FILE_PATH;
+    file = fopen(state_file, "r");
 
     if (file == NULL && errno == ENOENT) {
-        file = fopen(LID_STATE_FILE_PATH2, "r");
+        state_file = LID_STATE_FILE_PATH2;
+        file = fopen(state_file, "r");
     }
 
     //If we still don't have a lid, then we're not a laptop.
@@ -93,7 +99,10 @@ int get_lid_status(void) {
         return LID_UNKNOWN;
     }
 
-    fgets(data, sizeof(data), file);
+    if (fgets(data, sizeof(data), file) == NULL) {
+        xcpmd_log(LOG_ERR, "Failed to read %s", state_file);
+    }
+
     fclose(file);
 
     if (strstr(data, "open"))
